@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -14,12 +14,33 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import ReportNode from "./nodes/report-node";
 import NodeSidebar from "./node-sidebar";
+import { ProjectSidebar } from "./project-sidebar";
 import ReportNodeEditor from "./report-node-editor";
+import { ReportPreview } from "./report-preview"; // Import the new component
 import { FileText, Sparkles, X } from "lucide-react";
 
 const nodeTypes: NodeTypes = {
   report: ReportNode,
 };
+
+// FitView 组件：只在初始加载时调用 fitView
+function FitView() {
+  const { fitView } = useReactFlow();
+  const hasFittedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasFittedRef.current) {
+      // 延迟执行，确保节点已渲染
+      const timer = setTimeout(() => {
+        fitView({ duration: 400, padding: 0.2 });
+        hasFittedRef.current = true;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [fitView]);
+
+  return null;
+}
 
 interface ReportEditorProps {
   initialNodes: Node[];
@@ -41,30 +62,284 @@ function ReportEditorContent({
   const [selectedNode, setSelectedNode] = useState<any>(null);
   const [showGenerateModal, setShowGenerateModal] =
     useState(false);
-  const [previewWidth, setPreviewWidth] = useState(50); // 预览面板宽度百分比，默认50%
+  const [previewHeight, setPreviewHeight] = useState(55); // 预览面板高度百分比，默认55%
   const [isResizingPreview, setIsResizingPreview] =
     useState(false);
-  const { setCenter, getNode } = useReactFlow();
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const { setCenter, getNode, fitView, getViewport } = useReactFlow();
 
-  // 同步本地状态到父组件
+  const [editorPosition, setEditorPosition] = useState({ x: -1, y: 100 });
+  const [isDraggingEditor, setIsDraggingEditor] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  const [isReportGenerating, setIsReportGenerating] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 使用 ref 来跟踪是否是内部更新，避免循环同步
+  const isInternalUpdateRef = useRef(false);
+  const initialNodesRef = useRef(initialNodes);
+  const initialEdgesRef = useRef(initialEdges);
+
+  // 处理编辑器拖动
   useEffect(() => {
-    onNodesChangeProp(nodes);
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingEditor) return;
+
+      const newX = e.clientX - dragOffset.x;
+      const newY = e.clientY - dragOffset.y;
+
+      // 简单的边界检查
+      const maxX = window.innerWidth - 480;
+      const maxY = window.innerHeight - 100;
+
+      setEditorPosition({
+        x: Math.max(0, Math.min(maxX, newX)),
+        y: Math.max(0, Math.min(maxY, newY))
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsDraggingEditor(false);
+    };
+
+    if (isDraggingEditor) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = 'none';
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingEditor, dragOffset]);
+
+  const handleEditorHeaderMouseDown = useCallback((e: React.MouseEvent) => {
+    setDragOffset({
+      x: e.clientX - editorPosition.x,
+      y: e.clientY - editorPosition.y
+    });
+    setIsDraggingEditor(true);
+  }, [editorPosition]);
+
+
+  // 当父组件传入的初始数据改变时（比如切换项目），同步到本地状态
+  useEffect(() => {
+    // 使用深度比较，避免不必要的更新
+    const nodesChanged = JSON.stringify(initialNodes) !== JSON.stringify(initialNodesRef.current);
+    if (nodesChanged && !isInternalUpdateRef.current) {
+      initialNodesRef.current = initialNodes;
+      setNodes(initialNodes);
+    }
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    const edgesChanged = JSON.stringify(initialEdges) !== JSON.stringify(initialEdgesRef.current);
+    if (edgesChanged && !isInternalUpdateRef.current) {
+      initialEdgesRef.current = initialEdges;
+      setEdges(initialEdges);
+    }
+  }, [initialEdges, setEdges]);
+
+  // 同步本地状态到父组件（使用防抖避免频繁更新）
+  useEffect(() => {
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      onNodesChangeProp(nodes);
+    }, 50);
+    
+    return () => clearTimeout(timer);
   }, [nodes, onNodesChangeProp]);
 
   useEffect(() => {
-    onEdgesChangeProp(edges);
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      onEdgesChangeProp(edges);
+    }, 50);
+    
+    return () => clearTimeout(timer);
   }, [edges, onEdgesChangeProp]);
 
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: any) => {
       setSelectedNode(node);
+      // Close editor on single click if selecting a different node
+      // Or keep it open if you want "sticky" behavior, but requirement implies explicitly double click to open
+      // We'll keep it simple: Single click selects, doesn't toggle editor.
     },
     [],
   );
 
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: any) => {
+      setSelectedNode(node);
+      setIsEditorOpen(true);
+
+      const { x, y, zoom } = getViewport();
+      // Calculate node's position in screen coordinates relative to the container
+      // node.position is the top-left of the node in flow coordinates
+      const nodeX = node.position.x * zoom + x;
+      const nodeY = node.position.y * zoom + y;
+
+      // Place editor to the right of the node (width approx 320px)
+      // Add some buffer (e.g. 20px)
+      const buffer = 20;
+      const nodeWidth = 320 * zoom;
+
+      setEditorPosition({
+        x: nodeX + nodeWidth + buffer,
+        y: nodeY
+      });
+    },
+    [getViewport]
+  );
+
+  // Template chapters mapping
+  const templateChapters: Record<string, string[]> = {
+    "危险房屋鉴定": [
+      "一、基本情况",
+      "二、房屋概况",
+      "三、鉴定内容和方法、主要检测仪器设备及原始记录一览",
+      "四、检测鉴定依据",
+      "五、检查和检测情况",
+      "六、复核验算",
+      "七、分析说明",
+      "八、鉴定意见及处理建议"
+    ],
+    "标准结构检测报告": [
+      "一、工程概况",
+      "二、检测依据",
+      "三、检测内容和方法",
+      "四、检测结果",
+      "五、检测结论",
+      "六、建议"
+    ],
+    "混凝土专项检测": [
+      "一、工程概况",
+      "二、检测方法",
+      "三、检测结果",
+      "四、结论与建议"
+    ],
+    "钢筋保护层厚度检测": [
+      "一、工程概况",
+      "二、检测方法",
+      "三、检测结果"
+    ],
+    "建筑物沉降观测": [
+      "一、工程概况",
+      "二、观测点布设",
+      "三、观测方法",
+      "四、观测数据",
+      "五、数据分析"
+    ],
+    "装配式结构验收": [
+      "一、工程概况",
+      "二、预制构件进场验收",
+      "三、连接节点验收",
+      "四、灌浆质量验收",
+      "五、结构性能检测",
+      "六、验收结论",
+      "七、建议"
+    ],
+    "节能工程检测": [
+      "一、工程概况",
+      "二、检测内容",
+      "三、检测方法",
+      "四、检测结果"
+    ],
+    "民用建筑可靠性鉴定": [
+      "一、工程概况",
+      "二、鉴定依据",
+      "三、鉴定内容",
+      "四、现场检查与检测",
+      "五、结构安全性评估",
+      "六、结构使用性评估",
+      "七、鉴定结论",
+      "八、处理建议"
+    ],
+    "工业建筑可靠性鉴定": [
+      "一、工程概况",
+      "二、鉴定依据",
+      "三、鉴定内容",
+      "四、现场检查与检测",
+      "五、结构系统鉴定",
+      "六、构件鉴定",
+      "七、材料鉴定",
+      "八、结构安全性评估",
+      "九、结构使用性评估",
+      "十、鉴定结论与建议"
+    ],
+    "抗震鉴定": [
+      "一、工程概况",
+      "二、鉴定依据",
+      "三、现场检查",
+      "四、抗震承载力验算",
+      "五、抗震构造措施检查",
+      "六、抗震性能评估",
+      "七、鉴定结论"
+    ],
+    "主体结构施工质量鉴定": [
+      "一、工程概况",
+      "二、鉴定依据",
+      "三、检查内容",
+      "四、检测结果",
+      "五、质量评估",
+      "六、鉴定结论"
+    ]
+  };
+
   const addNode = useCallback(
     (chapterTitle: string) => {
-      // 从标题中提取章节编号，格式如："第1章 概述" 或 "第2.1章 子章节"
+      // 检查是否是模板
+      if (chapterTitle.startsWith("TEMPLATE:")) {
+        const templateName = chapterTitle.replace("TEMPLATE:", "");
+        const chapters = templateChapters[templateName];
+        
+        if (chapters && chapters.length > 0) {
+          // 创建多个节点
+          const newNodes = chapters.map((chapter, index) => {
+            // 从章节标题中提取编号（如"一、"、"二、"等）
+            const chapterMatch = chapter.match(/^([一二三四五六七八九十]+)、/);
+            const chapterNumber = chapterMatch ? chapterMatch[1] : `${index + 1}`;
+            const title = chapter.replace(/^[一二三四五六七八九十]+、/, "");
+
+            return {
+              id: `report-${Date.now()}-${index}`,
+              type: "report",
+              position: {
+                x: 100 + (index % 3) * 400,
+                y: 100 + Math.floor(index / 3) * 150,
+              },
+              data: {
+                label: title || chapter,
+                chapterNumber: chapterNumber,
+                llmModel: "",
+                prompt: "",
+                references: [],
+                templates: [],
+                status: 'idle',
+              },
+            };
+          });
+          
+          // 标记为内部更新，避免触发循环同步
+          isInternalUpdateRef.current = true;
+          setNodes((nds) => [...nds, ...newNodes]);
+          return;
+        }
+      }
+
+      // 原有的单个节点创建逻辑
+      // 从标题中提取章节编号
       const match = chapterTitle.match(/第(.+?)章\s*(.+)/);
       const chapterNumber = match
         ? match[1]
@@ -85,8 +360,12 @@ function ReportEditorContent({
           prompt: "",
           references: [],
           templates: [],
+          status: 'idle', // idle, running, completed
         },
       };
+      
+      // 标记为内部更新，避免触发循环同步
+      isInternalUpdateRef.current = true;
       setNodes((nds) => [...nds, newNode]);
     },
     [nodes.length, setNodes],
@@ -97,16 +376,12 @@ function ReportEditorContent({
     (nodeId: string) => {
       const node = getNode(nodeId);
       if (node) {
-        // 选中节点
         setSelectedNode(node);
-
-        // 居中显示节点，带缩放动画
         setCenter(node.position.x + 100, node.position.y + 50, {
           zoom: 1.2,
           duration: 800,
         });
-
-        // 高亮节点（通过更新节点样式）
+        // 选中状态更新不需要标记为内部更新，这是用户操作
         setNodes((nds) =>
           nds.map((n) => ({
             ...n,
@@ -117,6 +392,88 @@ function ReportEditorContent({
     },
     [getNode, setCenter, setNodes],
   );
+
+  // 停止报告生成
+  const handleStopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsReportGenerating(false);
+    // 将所有 running 状态的节点重置为 idle
+    // 这是用户操作，应该同步到父组件
+    setNodes((nds) => nds.map(n => 
+      n.data.status === 'running' ? { ...n, data: { ...n.data, status: 'idle' } } : n
+    ));
+  }, [setNodes]);
+
+  // 模拟报告生成过程
+  const handleGenerateReport = async () => {
+    // 创建新的 AbortController
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
+    setShowGenerateModal(true);
+    setIsReportGenerating(true);
+
+    // 重置所有节点状态
+    setNodes((nds) => nds.map(n => ({ ...n, data: { ...n.data, status: 'idle' } })));
+
+    // 按顺序执行每个节点
+    // 这里简单假设节点顺序就是数组顺序，实际上可能需要按照边连接顺序排序
+    const sortedNodes = [...nodes].sort((a, b) => {
+      // 简单的根据y坐标排序，或者根据chapterNumber排序
+      return parseFloat(a.data.chapterNumber) - parseFloat(b.data.chapterNumber);
+    });
+
+    for (const node of sortedNodes) {
+      // 检查是否被终止
+      if (signal.aborted) {
+        break;
+      }
+
+      // 1. 设置当前节点为运行中
+      setNodes((nds) => nds.map(n =>
+        n.id === node.id ? { ...n, data: { ...n.data, status: 'running' } } : n
+      ));
+
+      // 聚焦到当前运行的节点
+      setCenter(node.position.x + 100, node.position.y + 50, { zoom: 1.2, duration: 500 });
+
+      // 模拟生成耗时（支持中断）
+      try {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(resolve, 1500);
+          signal.addEventListener('abort', () => {
+            clearTimeout(timeout);
+            reject(new Error('Generation aborted'));
+          });
+        });
+      } catch {
+        // 被终止，跳出循环
+        break;
+      }
+
+      // 再次检查是否被终止
+      if (signal.aborted) {
+        break;
+      }
+
+      // 2. 设置当前节点为完成
+      setNodes((nds) => nds.map(n =>
+        n.id === node.id ? { ...n, data: { ...n.data, status: 'completed' } } : n
+      ));
+    }
+
+    // 全部完成（或被终止）
+    if (!signal.aborted) {
+      setIsReportGenerating(false);
+      // 最后再fitView一下
+      setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 500);
+    }
+    
+    abortControllerRef.current = null;
+  };
 
   // MiniMap 节点颜色函数
   const getMiniMapNodeColor = (node: Node) => {
@@ -175,7 +532,6 @@ function ReportEditorContent({
 
         // 水平对齐检测（上下排列）
         if (dx < ALIGNMENT_THRESHOLD) {
-          // 检测是否在垂直方向接近
           const bottomOfOther =
             otherNode.position.y + nodeHeight;
           const topOfDragged = draggedNode.position.y;
@@ -183,7 +539,6 @@ function ReportEditorContent({
             draggedNode.position.y + nodeHeight;
           const topOfOther = otherNode.position.y;
 
-          // 拖动节点在目标节点下方
           if (
             Math.abs(topOfDragged - bottomOfOther) <
             SNAP_DISTANCE
@@ -191,7 +546,6 @@ function ReportEditorContent({
             snappedX = otherNode.position.x;
             snappedY = bottomOfOther + SNAP_GAP;
           }
-          // 拖动节点在目标节点上方
           else if (
             Math.abs(bottomOfDragged - topOfOther) <
             SNAP_DISTANCE
@@ -203,14 +557,12 @@ function ReportEditorContent({
 
         // 垂直对齐检测（左右排列）
         if (dy < ALIGNMENT_THRESHOLD) {
-          // 检测是否在水平方向接近
           const rightOfOther = otherNode.position.x + nodeWidth;
           const leftOfDragged = draggedNode.position.x;
           const rightOfDragged =
             draggedNode.position.x + nodeWidth;
           const leftOfOther = otherNode.position.x;
 
-          // 拖动节点在目标节点右侧
           if (
             Math.abs(leftOfDragged - rightOfOther) <
             SNAP_DISTANCE
@@ -218,7 +570,6 @@ function ReportEditorContent({
             snappedX = rightOfOther + SNAP_GAP;
             snappedY = otherNode.position.y;
           }
-          // 拖动节点在目标节点左侧
           else if (
             Math.abs(rightOfDragged - leftOfOther) <
             SNAP_DISTANCE
@@ -238,26 +589,23 @@ function ReportEditorContent({
         const centerYOther =
           otherNode.position.y + nodeHeight / 2;
 
-        // 水平中心对齐
         if (
           Math.abs(centerXDragged - centerXOther) <
-            ALIGNMENT_THRESHOLD &&
+          ALIGNMENT_THRESHOLD &&
           dy < SNAP_DISTANCE
         ) {
           snappedX = otherNode.position.x;
         }
 
-        // 垂直中心对齐
         if (
           Math.abs(centerYDragged - centerYOther) <
-            ALIGNMENT_THRESHOLD &&
+          ALIGNMENT_THRESHOLD &&
           dx < SNAP_DISTANCE
         ) {
           snappedY = otherNode.position.y;
         }
       });
 
-      // 应用吸附位置
       if (
         snappedX !== draggedNode.position.x ||
         snappedY !== draggedNode.position.y
@@ -274,22 +622,25 @@ function ReportEditorContent({
     [nodes, setNodes],
   );
 
-  // 处理预览面板宽度调整
+  // Ref for the main content area to calculate precise resize widths
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 处理预览面板高度调整
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingPreview) return;
+      if (!isResizingPreview || !containerRef.current) return;
 
-      const containerWidth = window.innerWidth;
-      const rightEdge = containerWidth - e.clientX;
-      const newWidthPercent =
-        (rightEdge / containerWidth) * 100;
+      const containerRect = containerRef.current.getBoundingClientRect();
+      // Calculate height from the top of the container
+      const newHeightPixels = e.clientY - containerRect.top;
+      const newHeightPercent = (newHeightPixels / containerRect.height) * 100;
 
-      // 限制宽度在33.33%到80%之间
-      const clampedWidth = Math.max(
-        33.33,
-        Math.min(80, newWidthPercent),
+      // 限制高度在30%到80%之间
+      const clampedHeight = Math.max(
+        30,
+        Math.min(80, newHeightPercent),
       );
-      setPreviewWidth(clampedWidth);
+      setPreviewHeight(clampedHeight);
     };
 
     const handleMouseUp = () => {
@@ -299,7 +650,7 @@ function ReportEditorContent({
     if (isResizingPreview) {
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "col-resize";
+      document.body.style.cursor = "row-resize";
       document.body.style.userSelect = "none";
     }
 
@@ -314,244 +665,140 @@ function ReportEditorContent({
     };
   }, [isResizingPreview]);
 
+  // 当预览面板显示状态改变时，自动调整视图以展示所有节点
+  useEffect(() => {
+    if (showGenerateModal) {
+      // 稍微延迟以等待布局更新
+      const timer = setTimeout(() => {
+        fitView({ duration: 600, padding: 0.2 });
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [showGenerateModal, fitView]);
+
   return (
-    <div className="flex h-full bg-slate-50">
+    <div className="flex h-full w-full bg-slate-50 relative">
       {/* Sidebar */}
       <NodeSidebar
         onAddNode={addNode}
         mode="report"
         nodes={nodes}
         onNodeSelect={handleNodeSelect}
-        onGenerateReport={() => setShowGenerateModal(true)}
+        onGenerateReport={handleGenerateReport}
+        onStopGeneration={handleStopGeneration}
+        isGenerating={isReportGenerating}
       />
 
-      {/* Flow Editor */}
-      <div className="flex-1 relative">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onNodeClick={onNodeClick}
-          nodeTypes={nodeTypes}
-          fitView
-          className="bg-slate-50"
-          selectionOnDrag
-          panOnDrag={[1, 2]}
-          selectionMode="partial"
-          multiSelectionKeyCode="Shift"
-          nodesConnectable={false}
-          edgesUpdatable={false}
-          edgesFocusable={false}
-          onNodeDragStop={handleNodeDragStop}
-        >
-          <Background color="#e2e8f0" gap={16} />
-          <Controls className="bg-white border border-slate-200 rounded-lg shadow-sm" />
-          <MiniMap
-            className="bg-white border border-slate-200 rounded-lg shadow-sm"
-            nodeColor={getMiniMapNodeColor}
-            maskColor="rgba(241, 245, 249, 0.8)"
-            pannable
-            zoomable
-          />
-        </ReactFlow>
-
-        {/* 生成报告弹窗 */}
+      {/* Main Content Area (Vertical Split Pane) */}
+      <div className="flex-1 flex flex-col relative overflow-hidden" ref={containerRef}>
+        {/* Preview Panel - Top (above canvas) */}
         {showGenerateModal && (
-          <>
-            {/* 背景遮罩 */}
-            <div
-              className="absolute inset-0 bg-black/20 backdrop-blur-sm z-20 transition-opacity duration-300"
-              onClick={() => setShowGenerateModal(false)}
-            />
+          <div
+            className={`relative bg-white border-b border-slate-200 shadow-sm z-10 flex flex-col w-full ${isResizingPreview ? '' : 'transition-all duration-300 ease-in-out'
+              }`}
+            style={{ height: `${previewHeight}%` }}
+          >
+            {/* The Report Preview Component */}
+            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
+              <ReportPreview 
+                isGenerating={isReportGenerating} 
+                onClose={() => setShowGenerateModal(false)}
+              />
+            </div>
 
-            {/* 弹窗内容 - 从右侧滑入，宽度可调 */}
+            {/* Resizer Handle - Horizontal */}
             <div
-              className="absolute right-0 top-0 bottom-0 bg-white shadow-2xl z-30 overflow-hidden flex flex-col border-l border-slate-200 transition-transform duration-300 ease-out"
-              style={{
-                width: `${previewWidth}%`,
-                transform: showGenerateModal
-                  ? "translateX(0)"
-                  : "translateX(100%)",
-              }}
+              className="absolute left-0 right-0 bottom-0 h-2 cursor-row-resize hover:bg-blue-100 transition-colors z-20 flex items-center justify-center group"
+              onMouseDown={() => setIsResizingPreview(true)}
             >
-              {/* 左侧拖拽手柄 */}
-              <div
-                className="absolute left-0 top-0 bottom-0 w-1 cursor-col-resize hover:bg-indigo-500 transition-colors group z-40"
-                onMouseDown={() => setIsResizingPreview(true)}
+              {/* 中间的拖动指示器 - 拉到底时消失 */}
+              <div 
+                className={`flex flex-col items-center gap-0.5 transition-opacity duration-200 ${previewHeight >= 78 ? 'opacity-0' : 'opacity-100'}`}
               >
-                <div className="absolute inset-y-0 -left-1 -right-1" />
-                {/* 拖拽指示器 */}
-                <div className="absolute top-1/2 -translate-y-1/2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <div className="w-1 h-12 bg-indigo-500 rounded-full shadow-lg" />
-                </div>
-              </div>
-
-              {/* 弹窗头部 */}
-              <div className="relative bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 p-6 text-white">
-                {/* 装饰性光效 */}
-                <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
-
-                <div className="relative flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm">
-                      <Sparkles className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <h2 className="text-2xl font-bold">
-                        报告预览
-                      </h2>
-                      <p className="text-sm text-white/80 mt-1">
-                        智能生成完整工程报告文档
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setShowGenerateModal(false)}
-                    className="p-2 hover:bg-white/20 rounded-lg transition-colors"
-                  >
-                    <X className="w-6 h-6" />
-                  </button>
-                </div>
-              </div>
-
-              {/* 弹窗主体内容 */}
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="h-full flex items-center justify-center">
-                  {/* 报告生成动画 */}
-                  <div className="text-center">
-                    {/* 文档图标容器 */}
-                    <div className="relative inline-block mb-8">
-                      {/* 外层光环 */}
-                      <div className="absolute inset-0 -m-8">
-                        <div className="w-full h-full rounded-full bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 opacity-20 animate-ping" />
-                      </div>
-
-                      {/* 旋转光环 */}
-                      <div className="absolute inset-0 -m-6 animate-spin-slow">
-                        <div className="w-full h-full rounded-full border-4 border-transparent border-t-blue-500 border-r-indigo-500" />
-                      </div>
-
-                      {/* 文档图标 */}
-                      <div className="relative bg-white rounded-3xl shadow-2xl p-12 border border-slate-200">
-                        {/* 主文档图标 */}
-                        <div className="relative">
-                          <FileText
-                            className="w-24 h-24 text-blue-600"
-                            strokeWidth={1.5}
-                          />
-
-                          {/* 刷新图标 - 在文档中央旋转 */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-full p-3 animate-spin-slow shadow-lg">
-                              <Sparkles className="w-8 h-8 text-white" />
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 装饰性光点 */}
-                        <div className="absolute top-4 right-4 w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
-                        <div
-                          className="absolute bottom-4 left-4 w-2 h-2 bg-indigo-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.5s" }}
-                        />
-                        <div
-                          className="absolute top-1/2 right-2 w-1.5 h-1.5 bg-purple-400 rounded-full animate-pulse"
-                          style={{ animationDelay: "0.3s" }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 状态文字 */}
-                    <div className="space-y-3">
-                      <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
-                        正在生成智能报告
-                      </h3>
-                      <p className="text-slate-500">
-                        依赖的工程数据已就绪，报告内容生成中...
-                      </p>
-
-                      {/* 进度指示点 */}
-                      <div className="flex items-center justify-center gap-2 pt-4">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
-                        <div
-                          className="w-2 h-2 bg-indigo-500 rounded-full animate-bounce"
-                          style={{ animationDelay: "0.1s" }}
-                        />
-                        <div
-                          className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"
-                          style={{ animationDelay: "0.2s" }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* 章节统计 - 简化版 */}
-                    <div className="mt-12 inline-flex items-center gap-6 px-8 py-4 bg-slate-50 rounded-full border border-slate-200">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                        <span className="text-sm text-slate-600">
-                          <span className="font-semibold text-slate-800">
-                            {nodes.length}
-                          </span>{" "}
-                          个章节
-                        </span>
-                      </div>
-                      <div className="w-px h-4 bg-slate-300" />
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-sm text-slate-600">
-                          生成中
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 弹窗底部操作栏 */}
-              <div className="border-t border-slate-200 p-6 bg-slate-50">
-                <div className="flex items-center justify-between max-w-4xl mx-auto">
-                  <div className="text-sm text-slate-600">
-                    {nodes.filter(
-                      (n) => n.data.llmModel && n.data.prompt,
-                    ).length === nodes.length &&
-                    nodes.length > 0 ? (
-                      <span className="text-green-600 font-medium">
-                        ✓ 所有章节配置完成，可以生成报告
-                      </span>
-                    ) : (
-                      <span className="text-amber-600">
-                        部分章节未配置完成，建议完善后再生成
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => setShowGenerateModal(false)}
-                    className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-100 transition-colors"
-                  >
-                    取消
-                  </button>
-                </div>
+                <div className="w-8 h-0.5 bg-slate-300 rounded-full group-hover:bg-blue-400 transition-colors" />
+                <svg 
+                  className="w-3 h-3 text-slate-400 group-hover:text-blue-500 transition-colors" 
+                  viewBox="0 0 24 24" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  strokeWidth="2"
+                >
+                  <path d="M7 10l5 5 5-5" />
+                </svg>
               </div>
             </div>
-          </>
+          </div>
         )}
+
+        {/* Flow Editor - takes remaining space */}
+        <div className="flex-1 relative w-full min-h-0">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            onNodeDoubleClick={onNodeDoubleClick}
+            nodeTypes={nodeTypes}
+            className="bg-slate-50"
+            selectionOnDrag
+            panOnDrag={[1, 2]}
+            selectionMode="partial"
+            multiSelectionKeyCode="Shift"
+            nodesConnectable={false}
+            edgesUpdatable={false}
+            edgesFocusable={false}
+            onNodeDragStop={handleNodeDragStop}
+          >
+            <Background color="#e2e8f0" gap={16} />
+            <Controls className="bg-white border border-slate-200 rounded-lg shadow-sm" />
+            <MiniMap
+              className="bg-white border border-slate-200 rounded-lg shadow-sm"
+              nodeColor={getMiniMapNodeColor}
+              maskColor="rgba(241, 245, 249, 0.8)"
+              pannable
+              zoomable
+            />
+            <FitView />
+          </ReactFlow>
+
+          {/* 空白画布提示 */}
+          {nodes.length === 0 && !showGenerateModal && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                <p className="text-slate-400 text-sm">请从左侧选择报告模板或添加章节节点</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Report Node Editor Panel */}
-      {selectedNode && (
-        <ReportNodeEditor
-          node={selectedNode}
-          onClose={() => setSelectedNode(null)}
-          onUpdate={(updatedNode) => {
-            setNodes((nds) =>
-              nds.map((n) =>
-                n.id === updatedNode.id ? updatedNode : n,
-              ),
-            );
+      {/* Report Node Editor Panel (Floating Draggable) */}
+      {selectedNode && isEditorOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            left: editorPosition.x,
+            top: editorPosition.y,
+            height: '600px', // Fixed height for better UX
+            zIndex: 50
           }}
-        />
+          className="shadow-2xl rounded-lg overflow-hidden border border-slate-200"
+        >
+          <ReportNodeEditor
+            node={selectedNode}
+            onClose={() => setIsEditorOpen(false)}
+            onUpdate={(updatedNode) => {
+              setNodes((nds) =>
+                nds.map((n) =>
+                  n.id === updatedNode.id ? updatedNode : n,
+                ),
+              );
+            }}
+            onHeaderMouseDown={handleEditorHeaderMouseDown}
+          />
+        </div>
       )}
     </div>
   );

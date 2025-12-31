@@ -5,9 +5,10 @@ interface ReportNodeEditorProps {
   node: any;
   onClose: () => void;
   onUpdate: (node: any) => void;
+  onHeaderMouseDown?: (e: React.MouseEvent) => void;
 }
 
-export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNodeEditorProps) {
+export default function ReportNodeEditor({ node, onClose, onUpdate, onHeaderMouseDown }: ReportNodeEditorProps) {
   const [label, setLabel] = useState(node.data.label);
   const [chapterNumber, setChapterNumber] = useState(node.data.chapterNumber || '');
   const [llmModel, setLlmModel] = useState(node.data.llmModel || '');
@@ -16,10 +17,72 @@ export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNode
   const [templates, setTemplates] = useState(node.data.templates || []);
   const [activeTab, setActiveTab] = useState<'llm' | 'prompt' | 'references' | 'templates'>('llm');
 
+  // 中文数字转阿拉伯数字
+  const chineseToNumber = (cn: string): number => {
+    const map: { [key: string]: number } = {
+      '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+      '六': 6, '七': 7, '八': 8, '九': 9, '十': 10
+    };
+    
+    // 简单处理 1-99 的情况
+    if (map[cn]) return map[cn];
+    
+    if (cn.startsWith('十')) {
+      const second = cn.replace('十', '');
+      return 10 + (map[second] || 0);
+    }
+    
+    if (cn.includes('十')) {
+      const [first, second] = cn.split('十');
+      const num1 = map[first] || 1;
+      const num2 = map[second] || 0;
+      return num1 * 10 + num2;
+    }
+    
+    return 0;
+  };
+
+  // 将章节编号中的中文数字转换为阿拉伯数字
+  const convertChineseToArabic = (input: string): string => {
+    if (!input) return '';
+    
+    // 替换中文顿号、句号为点
+    let normalized = input.replace(/[、。]/g, '.');
+    
+    // 分割为各部分
+    const parts = normalized.split('.');
+    
+    const convertedParts = parts.map((part) => {
+      const trimmed = part.trim();
+      if (!trimmed) return '';
+      
+      // 尝试解析中文数字
+      const cnNum = chineseToNumber(trimmed);
+      if (cnNum > 0) {
+        return cnNum.toString();
+      }
+      
+      // 如果不是中文数字，保持原样（可能是阿拉伯数字或其他字符）
+      return trimmed;
+    });
+    
+    return convertedParts.join('.');
+  };
+
+  // 处理章节编号输入变化
+  const handleChapterNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const inputValue = e.target.value;
+    // 自动转换中文数字为阿拉伯数字
+    const converted = convertChineseToArabic(inputValue);
+    setChapterNumber(converted);
+  };
+
   // 当node变化时，更新所有状态
   useEffect(() => {
     setLabel(node.data.label);
-    setChapterNumber(node.data.chapterNumber || '');
+    // 如果章节编号包含中文数字，自动转换为阿拉伯数字
+    const initialChapterNumber = node.data.chapterNumber || '';
+    setChapterNumber(convertChineseToArabic(initialChapterNumber));
     setLlmModel(node.data.llmModel || '');
     setPrompt(node.data.prompt || '');
     setReferences(node.data.references || []);
@@ -45,47 +108,52 @@ export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNode
   return (
     <div className="w-[480px] bg-white border-l border-slate-200 shadow-xl flex flex-col h-full">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+      <div
+        className="bg-white border-b border-slate-200 p-4 flex items-center justify-between cursor-move select-none"
+        onMouseDown={onHeaderMouseDown}
+      >
         <h3 className="text-slate-800">章节配置</h3>
         <button
           onClick={onClose}
           className="p-1 hover:bg-slate-100 rounded transition-colors"
+          onMouseDown={(e) => e.stopPropagation()}
         >
           <X className="w-5 h-5 text-slate-500" />
         </button>
       </div>
 
-      {/* Chapter Name */}
-      <div className="p-4 border-b border-slate-200">
-        <label className="block text-sm text-slate-600 mb-2">章节标题</label>
-        <input
-          type="text"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
-      </div>
-
-      {/* Chapter Number */}
-      <div className="p-4 border-b border-slate-200">
-        <label className="block text-sm text-slate-600 mb-2">章节编号</label>
-        <input
-          type="text"
-          value={chapterNumber}
-          onChange={(e) => setChapterNumber(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-        />
+      {/* Chapter Basic Info - Compact Row */}
+      <div className="p-4 border-b border-slate-200 grid grid-cols-[2fr_1fr] gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">章节标题</label>
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-shadow"
+            placeholder="输入章节标题"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider">章节编号</label>
+          <input
+            type="text"
+            value={chapterNumber}
+            onChange={handleChapterNumberChange}
+            className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-shadow"
+            placeholder="例如: 1.1 (支持中文数字自动转换)"
+          />
+        </div>
       </div>
 
       {/* Tabs */}
       <div className="border-b border-slate-200 px-4 flex gap-2">
         <button
           onClick={() => setActiveTab('llm')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'llm'
-              ? 'border-purple-600 text-purple-600'
-              : 'border-transparent text-slate-600 hover:text-slate-800'
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'llm'
+            ? 'border-purple-600 text-purple-600'
+            : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
         >
           <div className="flex items-center gap-2">
             <Brain className="w-4 h-4" />
@@ -94,11 +162,10 @@ export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNode
         </button>
         <button
           onClick={() => setActiveTab('prompt')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'prompt'
-              ? 'border-purple-600 text-purple-600'
-              : 'border-transparent text-slate-600 hover:text-slate-800'
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'prompt'
+            ? 'border-purple-600 text-purple-600'
+            : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
         >
           <div className="flex items-center gap-2">
             <LayoutTemplate className="w-4 h-4" />
@@ -107,11 +174,10 @@ export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNode
         </button>
         <button
           onClick={() => setActiveTab('references')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'references'
-              ? 'border-purple-600 text-purple-600'
-              : 'border-transparent text-slate-600 hover:text-slate-800'
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'references'
+            ? 'border-purple-600 text-purple-600'
+            : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
         >
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4" />
@@ -120,11 +186,10 @@ export default function ReportNodeEditor({ node, onClose, onUpdate }: ReportNode
         </button>
         <button
           onClick={() => setActiveTab('templates')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'templates'
-              ? 'border-purple-600 text-purple-600'
-              : 'border-transparent text-slate-600 hover:text-slate-800'
-          }`}
+          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${activeTab === 'templates'
+            ? 'border-purple-600 text-purple-600'
+            : 'border-transparent text-slate-600 hover:text-slate-800'
+            }`}
         >
           <div className="flex items-center gap-2">
             <FileText className="w-4 h-4" />

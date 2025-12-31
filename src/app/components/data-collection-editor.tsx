@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -8,8 +8,10 @@ import ReactFlow, {
   Edge,
   Node,
   NodeTypes,
+  useReactFlow,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import { Database } from 'lucide-react';
 import CollectionNode from './nodes/collection-node';
 import NodeSidebar from './node-sidebar';
 import CollectionDetailModal from './collection-detail-modal';
@@ -17,6 +19,25 @@ import CollectionDetailModal from './collection-detail-modal';
 const nodeTypes: NodeTypes = {
   collection: CollectionNode,
 };
+
+// FitView 组件：只在初始加载时调用 fitView
+function FitView() {
+  const { fitView } = useReactFlow();
+  const hasFittedRef = useRef(false);
+
+  useEffect(() => {
+    if (!hasFittedRef.current) {
+      // 延迟执行，确保节点已渲染
+      const timer = setTimeout(() => {
+        fitView({ duration: 400, padding: 0.2 });
+        hasFittedRef.current = true;
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [fitView]);
+
+  return null;
+}
 
 interface DataCollectionEditorProps {
   initialNodes: Node[];
@@ -39,13 +60,55 @@ export default function DataCollectionEditor({
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, any[]>>({});
   const [analysisResults, setAnalysisResults] = useState<Record<string, any>>({});
 
-  // 同步本地状态到父组件
+  // 使用 ref 来跟踪是否是内部更新，避免循环同步
+  const isInternalUpdateRef = useRef(false);
+  const initialNodesRef = useRef(initialNodes);
+  const initialEdgesRef = useRef(initialEdges);
+
+  // 当父组件传入的初始数据改变时（比如切换项目），同步到本地状态
   useEffect(() => {
-    onNodesChangeProp(nodes);
+    // 使用深度比较，避免不必要的更新
+    const nodesChanged = JSON.stringify(initialNodes) !== JSON.stringify(initialNodesRef.current);
+    if (nodesChanged && !isInternalUpdateRef.current) {
+      initialNodesRef.current = initialNodes;
+      setNodes(initialNodes);
+    }
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    const edgesChanged = JSON.stringify(initialEdges) !== JSON.stringify(initialEdgesRef.current);
+    if (edgesChanged && !isInternalUpdateRef.current) {
+      initialEdgesRef.current = initialEdges;
+      setEdges(initialEdges);
+    }
+  }, [initialEdges, setEdges]);
+
+  // 同步本地状态到父组件（使用防抖避免频繁更新）
+  useEffect(() => {
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    
+    // 使用 requestAnimationFrame 确保在下一帧更新，避免阻塞渲染
+    const timer = setTimeout(() => {
+      onNodesChangeProp(nodes);
+    }, 50);
+    
+    return () => clearTimeout(timer);
   }, [nodes, onNodesChangeProp]);
 
   useEffect(() => {
-    onEdgesChangeProp(edges);
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    
+    const timer = setTimeout(() => {
+      onEdgesChangeProp(edges);
+    }, 50);
+    
+    return () => clearTimeout(timer);
   }, [edges, onEdgesChangeProp]);
 
   const onNodeDoubleClick = useCallback((_: React.MouseEvent, node: any) => {
@@ -204,6 +267,9 @@ export default function DataCollectionEditor({
         fields: getDefaultFields(type)
       },
     };
+    
+    // 标记为内部更新，避免触发循环同步
+    isInternalUpdateRef.current = true;
     setNodes((nds) => [...nds, newNode]);
   }, [setNodes]);
 
@@ -220,7 +286,6 @@ export default function DataCollectionEditor({
           onNodesChange={onNodesChange}
           onNodeDoubleClick={onNodeDoubleClick}
           nodeTypes={nodeTypes}
-          fitView
           className="bg-slate-50"
           nodesDraggable={true}
           nodesConnectable={false}
@@ -240,7 +305,18 @@ export default function DataCollectionEditor({
             pannable
             zoomable
           />
+          <FitView />
         </ReactFlow>
+
+        {/* 空白画布提示 */}
+        {nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="text-center">
+              <Database className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+              <p className="text-slate-400 text-sm">请从左侧选择一个数据类型以创建节点</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Collection Detail Panel */}

@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FileText, Brain, BookOpen, LayoutTemplate } from 'lucide-react';
+import { FileText, Brain, BookOpen, LayoutTemplate, Loader2, CheckCircle2 } from 'lucide-react';
 
 // 定义章节颜色方案（高端商务配色）
 const chapterColors = [
@@ -78,14 +78,14 @@ const chapterColors = [
 // 根据章节编号获取顶层章节索引
 function getTopLevelChapterIndex(chapterNumber: string): number {
   if (!chapterNumber || chapterNumber.trim() === '') return 0;
-  
+
   // 提取第一个数字（如 "1.1.2" -> 1, "3" -> 3）
   const match = chapterNumber.match(/^(\d+)/);
   if (match) {
     const topLevel = parseInt(match[1], 10);
     return (topLevel - 1) % chapterColors.length; // 循环使用颜色
   }
-  
+
   return 0; // 默认第一个颜色
 }
 
@@ -95,20 +95,76 @@ function ReportNode({ data }: any) {
   const hasReferences = data.references && data.references.length > 0;
   const hasTemplates = data.templates && data.templates.length > 0;
 
+  const status = data.status || 'idle'; // idle, running, completed
+
   // 根据章节编号获取颜色
   const colorIndex = getTopLevelChapterIndex(data.chapterNumber);
   const colors = chapterColors[colorIndex];
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg border ${colors.border} min-w-[320px] overflow-hidden hover:shadow-xl ${colors.hover} transition-all`}>
+    <div className={`relative bg-white rounded-xl shadow-lg border min-w-[320px] overflow-hidden transition-all duration-300
+      ${status === 'running' ? 'border-transparent shadow-red-100' : ''}
+      ${status === 'completed' ? 'border-green-500 shadow-green-100' : colors.border}
+      ${status === 'idle' ? `${colors.hover} hover:shadow-xl` : ''}
+    `}>
+      {/* Running Animation: SVG Marquee Effect */}
+      {status === 'running' && (
+        <div className="absolute inset-0 z-0 pointer-events-none rounded-xl overflow-visible">
+          <svg className="absolute inset-0 w-full h-full overflow-visible">
+            <rect
+              x="2"
+              y="2"
+              width="calc(100% - 4px)"
+              height="calc(100% - 4px)"
+              rx="10"
+              ry="10"
+              fill="none"
+              stroke="#ef4444"
+              strokeWidth="3"
+              strokeDasharray="12 8"
+              strokeLinecap="round"
+              className="animate-[dash_1s_linear_infinite]"
+            />
+          </svg>
+          <style>{`
+            @keyframes dash {
+              to {
+                stroke-dashoffset: -20;
+              }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* Status Indicators Overlay */}
+      {status === 'running' && (
+        <div className="absolute -top-1 -right-1 z-10">
+          <span className="relative flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
+          </span>
+        </div>
+      )}
+
+      {/* Completed Checkmark: Bottom Right, shifted slightly inwards */}
+      {status === 'completed' && (
+        <div className="absolute -bottom-2 -right-1 z-20 bg-white rounded-full p-0.5 shadow-sm border border-slate-100">
+          <CheckCircle2 className="w-5 h-5 text-green-500 fill-green-50" />
+        </div>
+      )}
+
       <div className={`bg-gradient-to-r ${colors.gradient} px-4 py-2 text-white flex items-center justify-between`}>
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4" />
+          {status === 'running' ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <FileText className="w-4 h-4" />
+          )}
           <span className="font-medium text-sm">{data.label}</span>
         </div>
         <div className="text-xs opacity-90 bg-white/20 px-2 py-0.5 rounded">章节 {data.chapterNumber}</div>
       </div>
-      
+
       <div className="px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5">
         {/* LLM Model */}
         <div className="flex items-center gap-1.5 text-xs">
@@ -117,7 +173,7 @@ function ReportNode({ data }: any) {
             {hasLLM ? data.llmModel : 'LLM 未配置'}
           </span>
         </div>
-        
+
         {/* Prompt */}
         <div className="flex items-center gap-1.5 text-xs">
           <LayoutTemplate className={`w-3.5 h-3.5 flex-shrink-0 ${hasPrompt ? 'text-green-500' : 'text-slate-300'}`} />
@@ -125,7 +181,7 @@ function ReportNode({ data }: any) {
             {hasPrompt ? 'Prompt 已配置' : 'Prompt 未配置'}
           </span>
         </div>
-        
+
         {/* References */}
         <div className="flex items-center gap-1.5 text-xs">
           <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${hasReferences ? 'text-green-500' : 'text-slate-300'}`} />
@@ -133,7 +189,7 @@ function ReportNode({ data }: any) {
             {hasReferences ? `${data.references.length} 个规范` : '参考规范'}
           </span>
         </div>
-        
+
         {/* Templates */}
         <div className="flex items-center gap-1.5 text-xs">
           <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${hasTemplates ? 'text-green-500' : 'text-slate-300'}`} />
