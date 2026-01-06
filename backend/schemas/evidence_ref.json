@@ -1,0 +1,28 @@
+﻿{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["object_key", "type", "page", "source_hash"],
+  "properties": {
+    "object_key": {
+      "type": "string",
+      "description": "Object storage key or local path (Phase 0)."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["pdf", "image", "excel"],
+      "description": "File type."
+    },
+    "page": {
+      "type": "integer",
+      "description": "Page number (Phase 0 uses page level only)."
+    },
+    "snippet": {
+      "type": "string",
+      "description": "Optional text snippet."
+    },
+    "source_hash": {
+      "type": "string",
+      "description": "Source file hash."
+    }
+  }
+}

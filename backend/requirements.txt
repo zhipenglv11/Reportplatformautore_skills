@@ -1,0 +1,64 @@
+# Web框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6  # 文件上传必须
+
+# 数据验证
+pydantic==2.5.3
+pydantic-settings==2.1.0  # 用于配置管理
+
+# 数据库（Phase 0推荐SQLite，无需安装）
+sqlalchemy==2.0.25
+psycopg2-binary==2.9.9
+PyYAML==6.0.1
+# asyncpg==0.29.0  # PostgreSQL异步驱动（Phase 0不需要，Phase 1+才用）
+
+# =============================================================================
+# 文件存储（Phase 0使用本地磁盘，最简单）
+# =============================================================================
+# Phase 0采用本地文件系统存储，无需对象存储服务
+# - 上传文件存到：/data/autore/uploads/{project_id}/...
+# - PDF转图片存到：/data/autore/parsed/{run_id}/page-1.png
+# - object_key使用文件路径格式（后续迁移到OSS/S3时只需改路径前缀）
+# =============================================================================
+# 注意：os, pathlib, shutil 都是Python标准库，无需安装
+
+# =============================================================================
+# Parse 定位声明（非常重要，防止架构退化）
+# =============================================================================
+# Phase 0 文档解析采用 Vision-first 策略：
+# - 页面图像是主输入，多模态 LLM 负责结构理解
+# - 支持文件类型：PDF、图片（JPG/PNG/BMP/TIFF等）
+# - OCR / PDF 文本解析仅作为辅助信号，不作为语义来源
+# =============================================================================
+
+# PDF解析
+pdfplumber==0.10.3  # 用于PDF基本信息提取（辅助）
+pdf2image==1.16.3  # PDF转图片（Vision-first必需 - 主输入）
+
+# 图片处理（Vision-first必需 - 支持PDF和图片文件）
+Pillow==10.2.0     # 图片处理库（支持JPG/PNG/BMP/TIFF/WebP等格式）
+                   # 用于：图片格式转换、尺寸调整、base64编码等
+
+# OCR（Optional / Auxiliary - 可选，Phase 0作为辅助信号，不作为主输入）
+# ⚠️ Vision-first：页面图像是主输入
+# OCR 仅用于：
+# - Top-K 关键页筛选
+# - evidence_refs 的 snippet（可读性）
+# - 检索索引（后续RAG）
+# 选项1：PaddleOCR（如果要用OCR辅助）
+# paddlepaddle==2.6.1
+# paddleocr==2.7.3
+# 选项2：Tesseract（如果要用OCR辅助）
+# pytesseract==0.3.10
+# 还需要安装系统依赖：apt-get install tesseract-ocr 或 brew install tesseract
+# Phase 0可以先不装OCR，直接用多模态LLM（GPT-4V/Claude-3.5-Sonnet）
+
+# HTTP客户端（调用LLM）
+httpx==0.26.0
+
+# 环境变量管理
+python-dotenv==1.0.0
+
+# 注意：uuid, hashlib, base64, json 都是Python标准库，无需安装
+

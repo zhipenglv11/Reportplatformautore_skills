@@ -7,7 +7,8 @@ import {
     ChevronRight,
     Save,
     FileUp,
-    Check
+    Check,
+    FileText
 } from "lucide-react";
 
 interface ProjectHeaderProps {
@@ -16,6 +17,7 @@ interface ProjectHeaderProps {
     projectDate?: string;
     projectStatus?: string;
     engineer?: string;
+    reportType?: string;
     isAnimating?: boolean;
     animatingProjectName?: string;
 }
@@ -26,6 +28,7 @@ export function ProjectHeader({
     projectDate = '2024-12-30',
     projectStatus = '进行中',
     engineer = '王工',
+    reportType = '民标安全性',
     isAnimating = false, 
     animatingProjectName = '' 
 }: ProjectHeaderProps) {
@@ -122,7 +125,14 @@ export function ProjectHeader({
                     setShowAnimation(false);
                 }, 600);
                 return () => clearTimeout(timer);
+            } else {
+                // 如果找不到对话框元素（比如在 dashboard 视图），直接显示项目名称，不执行动画
+                // 确保 showAnimation 保持为 false，这样项目名称会正常显示
+                setShowAnimation(false);
             }
+        } else if (!isAnimating) {
+            // 当动画结束时，确保 showAnimation 为 false
+            setShowAnimation(false);
         }
     }, [isAnimating, animatingProjectName]);
     return (
@@ -140,7 +150,7 @@ export function ProjectHeader({
                     )}
                     <span 
                         ref={projectNameRef}
-                        className={`font-semibold text-slate-800 transition-opacity duration-300 ${showAnimation ? 'opacity-0' : 'opacity-100'}`}
+                        className={`font-semibold text-slate-800 transition-opacity duration-300 ${isAnimating && showAnimation ? 'opacity-0' : 'opacity-100'}`}
                     >
                         {projectName}
                     </span>
@@ -162,6 +172,14 @@ export function ProjectHeader({
             <div className="flex items-center gap-6">
                 {/* Meta Info moved from left */}
                 <div className="flex items-center gap-4 text-xs text-slate-400">
+                    {/* 报告类型显示 */}
+                    <div className="flex items-center gap-1">
+                        <FileText className="w-3 h-3" />
+                        <span>{reportType || '未设置'}</span>
+                    </div>
+                    
+                    <div className="h-4 w-px bg-slate-200" />
+                    
                     <div className="flex items-center gap-1">
                         <Hash className="w-3 h-3" />
                         <span>{projectCode}</span>

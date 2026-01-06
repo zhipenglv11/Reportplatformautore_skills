@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { FlaskConical, Cylinder, BrickWall, Cable, Ruler, TestTube } from 'lucide-react';
+import { FlaskConical, Cylinder, BrickWall, Cable, Ruler, TestTube, ClipboardCheck } from 'lucide-react';
 
 const getIcon = (type: string) => {
   switch (type) {
@@ -15,6 +15,8 @@ const getIcon = (type: string) => {
       return <Ruler className="w-5 h-5" />;
     case 'material-test':
       return <TestTube className="w-5 h-5" />;
+    case 'site-inspection':
+      return <ClipboardCheck className="w-5 h-5" />;
     default:
       return <TestTube className="w-5 h-5" />;
   }
@@ -34,6 +36,8 @@ const getColor = (type: string) => {
       return 'from-amber-500 to-amber-600';
     case 'material-test':
       return 'from-emerald-500 to-emerald-600';
+    case 'site-inspection':
+      return 'from-teal-500 to-teal-600';
     default:
       return 'from-blue-500 to-blue-600';
   }
@@ -53,6 +57,8 @@ const getBorderColor = (type: string) => {
       return 'border-amber-200 hover:border-amber-300';
     case 'material-test':
       return 'border-emerald-200 hover:border-emerald-300';
+    case 'site-inspection':
+      return 'border-teal-200 hover:border-teal-300';
     default:
       return 'border-blue-200 hover:border-blue-300';
   }
@@ -66,6 +72,7 @@ const getTypeLabel = (type: string) => {
     'brick-strength': '砖强度',
     'inclination': '倾斜测量',
     'material-test': '材料检测',
+    'site-inspection': '现场情况检查',
   };
   return labels[type] || '数据输入';
 };
@@ -78,35 +85,10 @@ function CollectionNode({ data }: any) {
         <span className="font-medium">{data.label}</span>
       </div>
       
-      <div className="p-4 text-sm text-slate-600">
-        <div className="flex items-center justify-between mb-3">
+      <div className="p-3">
+        <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">类型:</span>
-          <span className="text-xs font-medium">{getTypeLabel(data.type)}</span>
-        </div>
-        
-        {data.fields && data.fields.length > 0 && (
-          <div className="mb-2">
-            <div className="text-xs text-slate-500 mb-2">
-              {data.fields.length} 个字段已配置
-            </div>
-            <div className="space-y-1">
-              {data.fields.slice(0, 3).map((field: any, index: number) => (
-                <div key={index} className="text-xs text-slate-600 flex items-center gap-1">
-                  <div className="w-1 h-1 rounded-full bg-slate-400"></div>
-                  {field.label}
-                </div>
-              ))}
-              {data.fields.length > 3 && (
-                <div className="text-xs text-slate-400">
-                  + {data.fields.length - 3} 更多字段
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="text-xs text-slate-400 text-center mt-3 pt-2 border-t border-slate-100">
-          点击节点查看详情
+          <span className="text-xs font-medium text-slate-700">{getTypeLabel(data.type)}</span>
         </div>
       </div>
     </div>

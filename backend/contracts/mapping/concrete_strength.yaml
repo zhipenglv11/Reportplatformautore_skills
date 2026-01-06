@@ -1,0 +1,119 @@
+meta:
+  rule_set_id: concrete_strength_mapping_v1
+  domain: concrete
+  skill: concrete_strength
+  version: v1
+  description: >
+    Normalize test_item from node_label/raw text into standardized values,
+    and normalize units into canonical forms.
+
+test_item_normalization:
+  canonical_items:
+    - id: concrete_compressive_strength
+      canonical_value: "混凝土抗压强度"
+      whitelist_key: "混凝土抗压强度"
+      aliases_exact:
+        - "混凝土抗压强度"
+        - "混凝土立方体抗压强度"
+        - "混凝土轴心抗压强度"
+        - "砼抗压强度"
+        - "砼立方体抗压强度"
+        - "抗压强度（混凝土）"
+        - "混凝土强度"
+        - "混凝土强度等级"
+        - "fcu"
+        - "fc"
+        - "fc'"
+      aliases_regex:
+        - "(?i).*混凝土.*抗压.*"
+        - "(?i).*砼.*抗压.*"
+        - "(?i).*(fcu|fc'|fc).*"
+        - "(?i).*混凝土.*强度.*"
+    - id: rebound_strength_estimate
+      canonical_value: "混凝土回弹推定强度"
+      whitelist_key: "混凝土回弹推定强度"
+      aliases_exact:
+        - "回弹推定强度"
+        - "混凝土回弹推定强度"
+        - "回弹法推定强度"
+      aliases_regex:
+        - "(?i).*(回弹|rebound).*推定.*强度.*"
+
+  fallback:
+    use_node_label_as_test_item: true
+    mark_source: "fallback"
+    warning_code: "TEST_ITEM_NOT_CANONICAL"
+
+unit_normalization:
+  canonical_units:
+    "MPa":
+      aliases_exact:
+        - "MPa"
+        - "Mpa"
+        - "mpa"
+        - "兆帕"
+      aliases_regex:
+        - "(?i)^m\\s*pa$"
+    "N/mm2":
+      aliases_exact:
+        - "N/mm2"
+        - "N/mm²"
+        - "n/mm2"
+        - "n/mm²"
+      aliases_regex:
+        - "(?i)^n\\s*/\\s*mm\\s*(2|²)$"
+
+  infer_if_missing:
+    enabled: true
+    default_unit: "MPa"
+    mark_source: "inferred"
+    warning_code: "UNIT_INFERRED"
+
+value_parsing:
+  extract_number_from_string:
+    enabled: true
+    regex: "([-+]?\\d+(?:\\.\\d+)?)"
+    mark_source: "parsed"
+
+  strip_tokens:
+    - "约"
+    - "≈"
+    - "~"
+    - "≥"
+    - "≤"
+
+output_contract:
+  fields:
+    - test_item
+    - test_item_original
+    - test_item_source
+    - test_unit
+    - test_unit_original
+    - test_unit_source
+    - test_result
+    - test_result_source
+    - mapping_rule_set_id
+
+  defaults:
+    mapping_rule_set_id: "${meta.rule_set_id}"
+
+examples:
+  - input:
+      node_label: "混凝土立方体抗压强度"
+      test_unit: "N/mm²"
+      test_result: "32.5"
+    expected:
+      test_item: "混凝土抗压强度"
+      test_item_source: "mapped"
+      test_unit: "N/mm2"
+      test_unit_source: "mapped"
+      test_result: 32.5
+  - input:
+      node_label: "混凝土强度"
+      test_unit: ""
+      test_result: "C30"
+    expected:
+      test_item: "混凝土抗压强度"
+      test_item_source: "mapped"
+      test_unit: "MPa"
+      test_unit_source: "inferred"

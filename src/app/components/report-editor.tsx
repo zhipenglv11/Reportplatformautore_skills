@@ -17,7 +17,7 @@ import NodeSidebar from "./node-sidebar";
 import { ProjectSidebar } from "./project-sidebar";
 import ReportNodeEditor from "./report-node-editor";
 import { ReportPreview } from "./report-preview"; // Import the new component
-import { FileText, Sparkles, X } from "lucide-react";
+import { FileText, Sparkles, X, GripHorizontal } from "lucide-react";
 
 const nodeTypes: NodeTypes = {
   report: ReportNode,
@@ -43,6 +43,8 @@ function FitView() {
 }
 
 interface ReportEditorProps {
+  projectId: string;
+  collectionNodes: Node[];
   initialNodes: Node[];
   initialEdges: Edge[];
   onNodesChange: (nodes: Node[]) => void;
@@ -50,6 +52,8 @@ interface ReportEditorProps {
 }
 
 function ReportEditorContent({
+  projectId,
+  collectionNodes,
   initialNodes,
   initialEdges,
   onNodesChange: onNodesChangeProp,
@@ -69,10 +73,19 @@ function ReportEditorContent({
   const { setCenter, getNode, fitView, getViewport } = useReactFlow();
 
   const [editorPosition, setEditorPosition] = useState({ x: -1, y: 100 });
+  const [editorSize, setEditorSize] = useState({ width: 420, height: 600 });
   const [isDraggingEditor, setIsDraggingEditor] = useState(false);
+  const [isResizingEditor, setIsResizingEditor] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [resizeStart, setResizeStart] = useState({ 
+    mouseX: 0, 
+    mouseY: 0, 
+    width: 0, 
+    height: 0 
+  });
 
   const [isReportGenerating, setIsReportGenerating] = useState(false);
+  const [reportChapters, setReportChapters] = useState<any[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // 使用 ref 来跟踪是否是内部更新，避免循环同步
@@ -83,37 +96,57 @@ function ReportEditorContent({
   // 处理编辑器拖动
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingEditor) return;
+      if (isDraggingEditor) {
+        const newX = e.clientX - dragOffset.x;
+        const newY = e.clientY - dragOffset.y;
 
-      const newX = e.clientX - dragOffset.x;
-      const newY = e.clientY - dragOffset.y;
+        // 简单的边界检查
+        const maxX = window.innerWidth - editorSize.width;
+        const maxY = window.innerHeight - 50;
 
-      // 简单的边界检查
-      const maxX = window.innerWidth - 480;
-      const maxY = window.innerHeight - 100;
-
-      setEditorPosition({
-        x: Math.max(0, Math.min(maxX, newX)),
-        y: Math.max(0, Math.min(maxY, newY))
-      });
+        setEditorPosition({
+          x: Math.max(0, Math.min(maxX, newX)),
+          y: Math.max(0, Math.min(maxY, newY))
+        });
+      } else if (isResizingEditor) {
+        // 计算鼠标移动的距离
+        const deltaX = e.clientX - resizeStart.mouseX;
+        const deltaY = e.clientY - resizeStart.mouseY;
+        
+        // 基于初始尺寸和移动距离计算新尺寸
+        const newWidth = Math.max(320, resizeStart.width + deltaX);
+        const newHeight = Math.max(400, resizeStart.height + deltaY);
+        
+        setEditorSize({
+          width: newWidth,
+          height: newHeight
+        });
+      }
     };
 
     const handleMouseUp = () => {
       setIsDraggingEditor(false);
+      setIsResizingEditor(false);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     };
 
-    if (isDraggingEditor) {
+    if (isDraggingEditor || isResizingEditor) {
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
       document.body.style.userSelect = 'none';
+      if (isResizingEditor) {
+        document.body.style.cursor = 'nwse-resize';
+      }
     }
 
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
     };
-  }, [isDraggingEditor, dragOffset]);
+  }, [isDraggingEditor, isResizingEditor, dragOffset, editorPosition, editorSize]);
 
   const handleEditorHeaderMouseDown = useCallback((e: React.MouseEvent) => {
     setDragOffset({
@@ -326,6 +359,9 @@ function ReportEditorContent({
                 prompt: "",
                 references: [],
                 templates: [],
+                templateStyle: "text_table_1",
+                referenceSpecType: "system",
+                referenceSpec: "JGJ/T 23-2011",
                 status: 'idle',
               },
             };
@@ -360,6 +396,9 @@ function ReportEditorContent({
           prompt: "",
           references: [],
           templates: [],
+          templateStyle: "text_table_1",
+          referenceSpecType: "system",
+          referenceSpec: "JGJ/T 23-2011",
           status: 'idle', // idle, running, completed
         },
       };
@@ -409,69 +448,111 @@ function ReportEditorContent({
 
   // 模拟报告生成过程
   const handleGenerateReport = async () => {
-    // 创建新的 AbortController
+    // ???? AbortController
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
 
     setShowGenerateModal(true);
     setIsReportGenerating(true);
+    setReportChapters([]);
 
-    // 重置所有节点状态
+    // ????????
     setNodes((nds) => nds.map(n => ({ ...n, data: { ...n.data, status: 'idle' } })));
 
-    // 按顺序执行每个节点
-    // 这里简单假设节点顺序就是数组顺序，实际上可能需要按照边连接顺序排序
+    // ???????????
     const sortedNodes = [...nodes].sort((a, b) => {
-      // 简单的根据y坐标排序，或者根据chapterNumber排序
       return parseFloat(a.data.chapterNumber) - parseFloat(b.data.chapterNumber);
     });
 
+    const nextChapters: any[] = [];
     for (const node of sortedNodes) {
-      // 检查是否被终止
       if (signal.aborted) {
         break;
       }
 
-      // 1. 设置当前节点为运行中
       setNodes((nds) => nds.map(n =>
         n.id === node.id ? { ...n, data: { ...n.data, status: 'running' } } : n
       ));
 
-      // 聚焦到当前运行的节点
       setCenter(node.position.x + 100, node.position.y + 50, { zoom: 1.2, duration: 500 });
 
-      // 模拟生成耗时（支持中断）
       try {
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(resolve, 1500);
-          signal.addEventListener('abort', () => {
-            clearTimeout(timeout);
-            reject(new Error('Generation aborted'));
-          });
+        const referenceSpecType = node.data?.referenceSpecType || node.data?.referenceTab || "system";
+        const referenceSpec =
+          node.data?.referenceSpec ||
+          node.data?.referenceCode ||
+          node.data?.systemReferenceCode ||
+          "JGJ/T 23-2011";
+        // 获取数据源节点ID（用于查询数据）
+        const sourceNodeId = node.data?.sourceNodeId || node.data?.source_node_id || null;
+        
+        const ruleId =
+          node.data?.userReferenceCode ||
+          (referenceSpecType === "user" ? referenceSpec : undefined);
+
+        const templateStyle = node.data?.templateStyle || node.data?.template_style || "concrete_strength_table";
+        
+        // 根据 templateStyle 自动映射 dataset_key
+        const datasetKeyMap: Record<string, string> = {
+          'concrete_strength_table': 'concrete_rebound_tests',  // 表格输出
+          'concrete_strength_desc': 'concrete_strength_description',  // 描述文本输出
+          'mortar_strength_data': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
+          'mortar_strength_desc': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
+          'brick_strength_table': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
+          'brick_strength_desc': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
+        };
+        const datasetKey = node.data?.datasetKey || node.data?.dataset_key || datasetKeyMap[templateStyle] || "concrete_rebound_tests";
+
+        const payload = {
+          project_id: projectId,
+          chapter_config: {
+            node_id: node.id, // 报告节点ID（用于标识章节）
+            sourceNodeId: sourceNodeId, // 数据源节点ID或检测大类（scope_开头）
+            title: node.data?.label,
+            dataset_key: datasetKey,
+            table_id: node.data?.tableId || node.data?.table_id || "table_7_rebound",
+            template_style: templateStyle,
+            reference_spec_type: referenceSpecType,
+            reference_spec: referenceSpec,
+            rule_id: ruleId,
+          },
+          project_context: {},
+        };
+
+        const response = await fetch("/api/report/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          signal,
         });
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: response.statusText }));
+          throw new Error(errorData.detail || errorData.message || response.statusText);
+        }
+
+        const result = await response.json();
+        if (result?.chapters?.length) {
+          nextChapters.push(...result.chapters);
+        }
       } catch {
-        // 被终止，跳出循环
         break;
       }
 
-      // 再次检查是否被终止
       if (signal.aborted) {
         break;
       }
 
-      // 2. 设置当前节点为完成
       setNodes((nds) => nds.map(n =>
         n.id === node.id ? { ...n, data: { ...n.data, status: 'completed' } } : n
       ));
     }
 
-    // 全部完成（或被终止）
     if (!signal.aborted) {
       setIsReportGenerating(false);
-      // 最后再fitView一下
+      setReportChapters(nextChapters);
       setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 500);
     }
-    
+
     abortControllerRef.current = null;
   };
 
@@ -701,7 +782,8 @@ function ReportEditorContent({
             {/* The Report Preview Component */}
             <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
               <ReportPreview 
-                isGenerating={isReportGenerating} 
+                isGenerating={isReportGenerating}
+                chapters={reportChapters}
                 onClose={() => setShowGenerateModal(false)}
               />
             </div>
@@ -781,10 +863,11 @@ function ReportEditorContent({
             position: 'absolute',
             left: editorPosition.x,
             top: editorPosition.y,
-            height: '600px', // Fixed height for better UX
+            width: editorSize.width,
+            height: editorSize.height,
             zIndex: 50
           }}
-          className="shadow-2xl rounded-lg overflow-hidden border border-slate-200"
+          className="shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white"
         >
           <ReportNodeEditor
             node={selectedNode}
@@ -797,7 +880,26 @@ function ReportEditorContent({
               );
             }}
             onHeaderMouseDown={handleEditorHeaderMouseDown}
+            collectionNodes={collectionNodes}
           />
+          {/* Resize Handle - Bottom Right Corner */}
+          <div
+            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 flex items-center justify-center hover:bg-slate-100 rounded-tl transition-colors"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              // 记录初始鼠标位置和窗口尺寸
+              setResizeStart({
+                mouseX: e.clientX,
+                mouseY: e.clientY,
+                width: editorSize.width,
+                height: editorSize.height
+              });
+              setIsResizingEditor(true);
+            }}
+          >
+            <div className="w-2 h-2 border-r-2 border-b-2 border-slate-400 transform translate-x-[-1px] translate-y-[-1px]"></div>
+          </div>
         </div>
       )}
     </div>

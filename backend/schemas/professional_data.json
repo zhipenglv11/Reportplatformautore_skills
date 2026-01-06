@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["test_item", "test_result", "test_unit", "evidence_refs"],
+  "properties": {
+    "test_item": {"type": "string"},
+    "test_result": {"type": "number"},
+    "test_unit": {"type": "string"},
+    "component_type": {"type": "string"},
+    "location": {"type": "object"},
+    "evidence_refs": {
+      "type": "array",
+      "items": {"$ref": "evidence_ref.json"}
+    },
+    "source_hash": {"type": "string"},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  }
+}
+

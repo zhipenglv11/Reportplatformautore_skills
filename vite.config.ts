@@ -16,4 +16,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8000',  // 后端FastAPI默认端口
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 })

@@ -1,99 +1,51 @@
-import { memo } from 'react';
-import { FileText, Brain, BookOpen, LayoutTemplate, Loader2, CheckCircle2 } from 'lucide-react';
+import React, { memo } from 'react';
+import { Handle, Position } from 'reactflow';
+import { FileText, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
-// 定义章节颜色方案（高端商务配色）
 const chapterColors = [
-  {
-    name: 'blue',
-    gradient: 'from-blue-500 to-blue-600',
-    handle: 'bg-blue-400',
-    border: 'border-blue-200',
-    hover: 'hover:shadow-blue-100',
-  },
-  {
-    name: 'purple',
-    gradient: 'from-purple-500 to-purple-600',
-    handle: 'bg-purple-400',
-    border: 'border-purple-200',
-    hover: 'hover:shadow-purple-100',
-  },
-  {
-    name: 'indigo',
-    gradient: 'from-indigo-500 to-indigo-600',
-    handle: 'bg-indigo-400',
-    border: 'border-indigo-200',
-    hover: 'hover:shadow-indigo-100',
-  },
-  {
-    name: 'violet',
-    gradient: 'from-violet-500 to-violet-600',
-    handle: 'bg-violet-400',
-    border: 'border-violet-200',
-    hover: 'hover:shadow-violet-100',
-  },
-  {
-    name: 'fuchsia',
-    gradient: 'from-fuchsia-500 to-fuchsia-600',
-    handle: 'bg-fuchsia-400',
-    border: 'border-fuchsia-200',
-    hover: 'hover:shadow-fuchsia-100',
-  },
-  {
-    name: 'pink',
-    gradient: 'from-pink-500 to-pink-600',
-    handle: 'bg-pink-400',
-    border: 'border-pink-200',
-    hover: 'hover:shadow-pink-100',
-  },
-  {
-    name: 'rose',
-    gradient: 'from-rose-500 to-rose-600',
-    handle: 'bg-rose-400',
-    border: 'border-rose-200',
-    hover: 'hover:shadow-rose-100',
-  },
-  {
-    name: 'cyan',
-    gradient: 'from-cyan-500 to-cyan-600',
-    handle: 'bg-cyan-400',
-    border: 'border-cyan-200',
-    hover: 'hover:shadow-cyan-100',
-  },
-  {
-    name: 'teal',
-    gradient: 'from-teal-500 to-teal-600',
-    handle: 'bg-teal-400',
-    border: 'border-teal-200',
-    hover: 'hover:shadow-teal-100',
-  },
-  {
-    name: 'emerald',
-    gradient: 'from-emerald-500 to-emerald-600',
-    handle: 'bg-emerald-400',
-    border: 'border-emerald-200',
-    hover: 'hover:shadow-emerald-100',
-  },
+  { border: 'border-blue-200', bg: 'bg-blue-50', text: 'text-blue-700', icon: 'text-blue-500', hover: 'hover:border-blue-300' },
+  { border: 'border-purple-200', bg: 'bg-purple-50', text: 'text-purple-700', icon: 'text-purple-500', hover: 'hover:border-purple-300' },
+  { border: 'border-emerald-200', bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'text-emerald-500', hover: 'hover:border-emerald-300' },
+  { border: 'border-orange-200', bg: 'bg-orange-50', text: 'text-orange-700', icon: 'text-orange-500', hover: 'hover:border-orange-300' },
+  { border: 'border-pink-200', bg: 'bg-pink-50', text: 'text-pink-700', icon: 'text-pink-500', hover: 'hover:border-pink-300' },
+  { border: 'border-cyan-200', bg: 'bg-cyan-50', text: 'text-cyan-700', icon: 'text-cyan-500', hover: 'hover:border-cyan-300' },
 ];
 
-// 根据章节编号获取顶层章节索引
 function getTopLevelChapterIndex(chapterNumber: string): number {
-  if (!chapterNumber || chapterNumber.trim() === '') return 0;
-
-  // 提取第一个数字（如 "1.1.2" -> 1, "3" -> 3）
+  if (!chapterNumber) return 0;
+  
+  // 提取第一个数字
   const match = chapterNumber.match(/^(\d+)/);
   if (match) {
-    const topLevel = parseInt(match[1], 10);
-    return (topLevel - 1) % chapterColors.length; // 循环使用颜色
+    const num = parseInt(match[1], 10);
+    return (num - 1) % chapterColors.length;
+  }
+  
+  // 处理中文数字 (简单处理一到十)
+  const cnNums = ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const firstChar = chapterNumber.charAt(0);
+  const index = cnNums.indexOf(firstChar);
+  if (index !== -1) {
+    return index % chapterColors.length;
   }
 
   return 0; // 默认第一个颜色
 }
 
 function ReportNode({ data }: any) {
-  const hasLLM = data.llmModel && data.llmModel.length > 0;
-  const hasPrompt = data.prompt && data.prompt.length > 0;
-  const hasReferences = data.references && data.references.length > 0;
-  const hasTemplates = data.templates && data.templates.length > 0;
+  // 获取规范和文档信息
+  // 优先使用新的数据结构（systemReferenceCode/userReferenceCode），兼容旧的数据结构（referenceCode/referenceTab）
+  const systemReferenceCode = data.systemReferenceCode || (data.referenceTab === 'system' ? (data.referenceCode || data.referenceSpec) : '');
+  const userReferenceCode = data.userReferenceCode || (data.referenceTab === 'user' ? (data.referenceCode || data.referenceSpec) : '');
+  
+  // 构建显示标签列表
+  const referenceLabels: string[] = [];
+  if (systemReferenceCode) {
+    referenceLabels.push(`规范：${systemReferenceCode}`);
+  }
+  if (userReferenceCode) {
+    referenceLabels.push(`文档：${userReferenceCode}`);
+  }
 
   const status = data.status || 'idle'; // idle, running, completed
 
@@ -138,66 +90,67 @@ function ReportNode({ data }: any) {
 
       {/* Status Indicators Overlay */}
       {status === 'running' && (
-        <div className="absolute -top-1 -right-1 z-10">
-          <span className="relative flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
-          </span>
+        <div className="absolute top-2 right-2 z-10 bg-white/90 backdrop-blur px-2 py-1 rounded-full shadow-sm border border-slate-100 flex items-center gap-1.5 animate-pulse">
+          <Loader2 className="w-3 h-3 text-blue-500 animate-spin" />
+          <span className="text-[10px] font-medium text-slate-600">生成中...</span>
         </div>
       )}
-
-      {/* Completed Checkmark: Bottom Right, shifted slightly inwards */}
       {status === 'completed' && (
-        <div className="absolute -bottom-2 -right-1 z-20 bg-white rounded-full p-0.5 shadow-sm border border-slate-100">
-          <CheckCircle2 className="w-5 h-5 text-green-500 fill-green-50" />
+        <div className="absolute top-2 right-2 z-10 bg-emerald-50 px-2 py-1 rounded-full border border-emerald-100 flex items-center gap-1.5">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          <span className="text-[10px] font-medium text-emerald-700">已生成</span>
         </div>
       )}
 
-      <div className={`bg-gradient-to-r ${colors.gradient} px-4 py-2 text-white flex items-center justify-between`}>
-        <div className="flex items-center gap-2">
-          {status === 'running' ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <FileText className="w-4 h-4" />
-          )}
-          <span className="font-medium text-sm">{data.label}</span>
-        </div>
-        <div className="text-xs opacity-90 bg-white/20 px-2 py-0.5 rounded">章节 {data.chapterNumber}</div>
-      </div>
-
-      <div className="px-4 py-2.5 grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {/* LLM Model */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <Brain className={`w-3.5 h-3.5 flex-shrink-0 ${hasLLM ? 'text-green-500' : 'text-slate-300'}`} />
-          <span className={`truncate ${hasLLM ? 'text-slate-700' : 'text-slate-400'}`}>
-            {hasLLM ? data.llmModel : 'LLM 未配置'}
-          </span>
-        </div>
-
-        {/* Prompt */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <LayoutTemplate className={`w-3.5 h-3.5 flex-shrink-0 ${hasPrompt ? 'text-green-500' : 'text-slate-300'}`} />
-          <span className={hasPrompt ? 'text-slate-700' : 'text-slate-400'}>
-            {hasPrompt ? 'Prompt 已配置' : 'Prompt 未配置'}
-          </span>
-        </div>
-
-        {/* References */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <BookOpen className={`w-3.5 h-3.5 flex-shrink-0 ${hasReferences ? 'text-green-500' : 'text-slate-300'}`} />
-          <span className={hasReferences ? 'text-slate-700' : 'text-slate-400'}>
-            {hasReferences ? `${data.references.length} 个规范` : '参考规范'}
-          </span>
-        </div>
-
-        {/* Templates */}
-        <div className="flex items-center gap-1.5 text-xs">
-          <FileText className={`w-3.5 h-3.5 flex-shrink-0 ${hasTemplates ? 'text-green-500' : 'text-slate-300'}`} />
-          <span className={hasTemplates ? 'text-slate-700' : 'text-slate-400'}>
-            {hasTemplates ? `${data.templates.length} 个模板` : '模板库'}
-          </span>
+      {/* Header */}
+      <div className={`px-4 py-3 border-b flex items-center justify-between ${status === 'completed' ? 'bg-emerald-50/50 border-emerald-100' : `${colors.bg} ${colors.border}`}`}>
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg bg-white shadow-sm ${status === 'completed' ? 'text-emerald-600' : colors.icon}`}>
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-bold px-1.5 py-0.5 rounded bg-white/60 ${status === 'completed' ? 'text-emerald-700' : colors.text}`}>
+                {data.chapterNumber || '1.0'}
+              </span>
+              <h3 className="font-bold text-slate-800 text-sm">
+                {data.label || '未命名章节'}
+              </h3>
+            </div>
+            <p className="text-[10px] text-slate-500 mt-0.5 font-medium">
+              报告生成节点
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Content */}
+      {referenceLabels.length > 0 && (
+        <div className="px-4 py-2.5 space-y-1.5">
+          {referenceLabels.map((label, index) => (
+            <div key={index} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-50 px-2 py-1.5 rounded border border-slate-100">
+              <div className="w-1 h-3 bg-slate-300 rounded-full"></div>
+              <span className="truncate flex-1" title={label}>
+                {label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Handles */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        className="w-3 h-3 !bg-slate-400 !border-2 !border-white shadow-sm"
+      />
+      {/* 
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="w-3 h-3 !bg-slate-400 !border-2 !border-white shadow-sm"
+      />
+      */}
     </div>
   );
 }

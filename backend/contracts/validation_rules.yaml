@@ -1,0 +1,57 @@
+rule_set:
+  id: concrete_strength_v1
+  description: Validation rules for concrete compressive strength test results
+
+  global_rules:
+    required_fields:
+      - test_item
+      - test_result
+      - test_unit
+      - evidence_refs
+
+    field_types:
+      test_item: string
+      test_result: number
+      test_unit: string
+      evidence_refs: array
+
+    evidence_rules:
+      min_count: 1
+      item_type: string
+
+    confidence_rules:
+      warning_threshold: 0.7
+      error_threshold: 0.4
+
+  skill_rules:
+    test_item_whitelist:
+      - 混凝土抗压强度
+      - 混凝土立方体抗压强度
+      - concrete_compressive_strength
+    test_item_whitelist_mode: warning
+
+    unit_rules:
+      allowed_units:
+        - MPa
+        - N/mm2
+      normalize_map:
+        "N/mm²": "N/mm2"
+
+    value_rules:
+      min_value: 1
+      max_value: 200
+      non_negative: true
+
+    semantic_rules:
+      forbid_units:
+        - mm
+        - kN
+        - "%"
+      forbid_keywords_in_test_item:
+        - 钢筋
+        - 砖
+        - 砂浆
+
+  output_policy:
+    on_error: block_write
+    on_warning: allow_write_with_flag

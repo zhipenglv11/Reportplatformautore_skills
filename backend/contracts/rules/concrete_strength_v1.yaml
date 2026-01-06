@@ -1,0 +1,27 @@
+rule_id: concrete_strength_v1
+version: "1.0"
+scope: "混凝土抗压强度（回弹法）"
+
+inputs:
+  - strength_estimated_mpa
+  - design_grade
+  - carbonation_depth_avg_mm
+  - age_days
+
+rules:
+  - id: eval_by_strength
+    if: "strength_estimated_mpa >= design_strength(design_grade)"
+    then:
+      evaluation: "符合设计要求"
+    else:
+      evaluation: "不符合设计要求"
+
+constraints:
+  - id: missing_design_grade
+    if: "design_grade is null"
+    then:
+      evaluation: "设计强度未提供，暂不评价"
+
+output_policy:
+  include_rule_version: true
+  forbid_uncovered: true

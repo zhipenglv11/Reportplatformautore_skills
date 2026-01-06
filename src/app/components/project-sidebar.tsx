@@ -11,7 +11,10 @@ import {
     FileText,
     Pencil,
     LayoutDashboard,
-    Folder
+    Folder,
+    Pin,
+    Archive,
+    Trash2
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
@@ -32,6 +35,13 @@ import {
 } from "./ui/dialog";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 export interface Project {
     id: string;
@@ -40,13 +50,16 @@ export interface Project {
     date?: string; // 项目日期
     status?: string; // 项目状态
     engineer?: string; // 工程师
+    reportType?: string; // 报告类型
     isActive?: boolean;
+    isPinned?: boolean; // 是否置顶
+    isArchived?: boolean; // 是否归档
 }
 
 interface ProjectSidebarProps {
     onNavigate?: (view: 'workspace' | 'dashboard' | 'overview') => void;
     currentView?: 'workspace' | 'dashboard' | 'overview';
-    onProjectCreated?: (projectName: string) => void;
+    onProjectCreated?: (projectName: string, newProject?: Project) => void;
     onProjectSelect?: (project: Project) => void;
     currentProjectId?: string;
 }
@@ -69,7 +82,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             date: '2024-12-30',
             status: '进行中',
             engineer: '王工',
-            isActive: true 
+            isActive: true,
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '2', 
@@ -77,7 +92,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241228-02',
             date: '2024-12-28',
             status: '已完成',
-            engineer: '李工'
+            engineer: '李工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '3', 
@@ -85,7 +102,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241225-03',
             date: '2024-12-25',
             status: '审核中',
-            engineer: '张工'
+            engineer: '张工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '4', 
@@ -93,7 +112,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241222-04',
             date: '2024-12-22',
             status: '已完成',
-            engineer: '赵工'
+            engineer: '赵工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '5', 
@@ -101,7 +122,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241220-05',
             date: '2024-12-20',
             status: '进行中',
-            engineer: '王工'
+            engineer: '王工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '6', 
@@ -109,7 +132,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'FW-24-0279',
             date: '2024-10-12',
             status: '已完成',
-            engineer: '陈工'
+            engineer: '陈工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '7', 
@@ -117,7 +142,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241015-07',
             date: '2024-10-15',
             status: '已完成',
-            engineer: '刘工'
+            engineer: '刘工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '8', 
@@ -125,7 +152,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241010-08',
             date: '2024-10-10',
             status: '进行中',
-            engineer: '周工'
+            engineer: '周工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '9', 
@@ -133,7 +162,9 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241005-09',
             date: '2024-10-05',
             status: '审核中',
-            engineer: '吴工'
+            engineer: '吴工',
+            isPinned: false,
+            isArchived: false
         },
         { 
             id: '10', 
@@ -141,14 +172,30 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             code: 'P-20241001-10',
             date: '2024-10-01',
             status: '已完成',
-            engineer: '郑工'
+            engineer: '郑工',
+            isPinned: false,
+            isArchived: false
         },
     ]);
     
-    // 默认显示的项目数量
+    // 项目排序：置顶的在前，归档的在后
+    const sortedProjects = [...projects].sort((a, b) => {
+        // 先按归档状态排序（未归档的在前）
+        if (a.isArchived !== b.isArchived) {
+            return a.isArchived ? 1 : -1;
+        }
+        // 再按置顶状态排序（置顶的在前）
+        if (a.isPinned !== b.isPinned) {
+            return a.isPinned ? -1 : 1;
+        }
+        return 0;
+    });
+
+    // 默认显示的项目数量（只显示未归档的项目）
+    const nonArchivedProjects = sortedProjects.filter(p => !p.isArchived);
     const defaultVisibleCount = 5;
-    const visibleProjects = showAllProjects ? projects : projects.slice(0, defaultVisibleCount);
-    const hiddenCount = projects.length - defaultVisibleCount;
+    const visibleProjects = showAllProjects ? nonArchivedProjects : nonArchivedProjects.slice(0, defaultVisibleCount);
+    const hiddenCount = nonArchivedProjects.length - defaultVisibleCount;
 
     useEffect(() => {
         const down = (e: KeyboardEvent) => {
@@ -176,6 +223,13 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
     };
 
     const handleOverviewClick = () => {
+        onNavigate?.('overview');
+    };
+
+    const handleLogoClick = () => {
+        // 清除所有项目的激活状态
+        setProjects(prev => prev.map(p => ({ ...p, isActive: false })));
+        // 导航到概览页面
         onNavigate?.('overview');
     };
 
@@ -217,7 +271,10 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
             date: projectDate,
             status: '进行中',
             engineer: '王工',
+            reportType: '民标安全性',
             isActive: true,
+            isPinned: false,
+            isArchived: false,
         };
         
         // 将之前的项目设为非激活状态
@@ -226,8 +283,8 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
         // 添加新项目并设为激活
         setProjects(prev => [newProject, ...prev]);
         
-        // 触发项目创建动画（在关闭对话框之前）
-        onProjectCreated?.(projectName);
+        // 触发项目创建动画（在关闭对话框之前），同时传递新项目对象
+        onProjectCreated?.(projectName, newProject);
         
         // 延迟关闭对话框，让动画先开始
         setTimeout(() => {
@@ -240,6 +297,44 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
         }, 50);
     };
 
+    const handlePinProject = (projectId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setProjects(prev => prev.map(p => 
+            p.id === projectId ? { ...p, isPinned: !p.isPinned } : p
+        ));
+    };
+
+    const handleArchiveProject = (projectId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setProjects(prev => {
+            const updated = prev.map(p => 
+                p.id === projectId ? { ...p, isArchived: !p.isArchived, isActive: false } : p
+            );
+            // 如果归档的是当前激活的项目，切换到第一个未归档的项目
+            if (projectId === currentProjectId) {
+                const nextProject = updated.find(p => !p.isArchived && p.id !== projectId);
+                if (nextProject) {
+                    setTimeout(() => handleProjectClick(nextProject), 0);
+                }
+            }
+            return updated;
+        });
+    };
+
+    const handleDeleteProject = (projectId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (window.confirm('确定要删除这个项目吗？此操作无法撤销。')) {
+            setProjects(prev => {
+                const updated = prev.filter(p => p.id !== projectId);
+                // 如果删除的是当前激活的项目，切换到第一个项目
+                if (projectId === currentProjectId && updated.length > 0) {
+                    setTimeout(() => handleProjectClick(updated[0]), 0);
+                }
+                return updated;
+            });
+        }
+    };
+
     return (
         <>
             <div className={`h-full flex flex-col bg-slate-50 border-r border-slate-200 flex-shrink-0 z-20 font-sans transition-all duration-300 ${isCollapsed ? 'w-16' : 'w-[260px]'
@@ -248,7 +343,7 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
                 <div className={`h-14 flex items-center mb-2 transition-all duration-300 ${isCollapsed ? 'justify-center px-0' : 'justify-between px-4'}`}>
                     {!isCollapsed ? (
                         <>
-                            <div className="flex items-center gap-2 p-2 hover:bg-slate-200/50 rounded-lg transition-colors cursor-pointer flex-1 overflow-hidden" onClick={() => handleProjectClick(undefined)}>
+                            <div className="flex items-center gap-2 p-2 hover:bg-slate-200/50 rounded-lg transition-colors cursor-pointer flex-1 overflow-hidden" onClick={handleLogoClick}>
                                 <div className="w-6 h-6 flex items-center justify-center text-[#BFA15F] flex-shrink-0">
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="w-full h-full">
                                         <path d="M7 12 L12 6 L17 9 L17 18" />
@@ -389,18 +484,54 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
 
                             {/* Existing Projects */}
                             {visibleProjects.map((project) => (
-                                <button
+                                <div
                                     key={project.id}
-                                    onClick={() => handleProjectClick(project)}
-                                    className={`w-full flex items-center py-2.5 rounded-lg transition-all duration-300 text-sm group pl-3 ${
+                                    className={`w-full flex items-center py-2.5 rounded-lg transition-all duration-300 text-sm group pl-3 pr-1 ${
                                         (activeItem === 'project' && (project.isActive || project.id === currentProjectId))
                                             ? 'bg-slate-200 text-slate-900 font-medium'
                                             : 'text-slate-700 hover:bg-slate-200/50'
                                         }`}
                                 >
-                                    <Building2 className={`w-4 h-4 flex-shrink-0 ${activeItem === 'project' && project.isActive ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`} />
-                                    <span className="whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out truncate max-w-[200px] opacity-100 ml-3">{project.name}</span>
-                                </button>
+                                    <button
+                                        onClick={() => handleProjectClick(project)}
+                                        className="flex-1 flex items-center min-w-0"
+                                    >
+                                        <Building2 className={`w-4 h-4 flex-shrink-0 ${activeItem === 'project' && project.isActive ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`} />
+                                        <span className="whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out truncate max-w-[160px] opacity-100 ml-3">{project.name}</span>
+                                    </button>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <button
+                                                className="p-1 rounded hover:bg-slate-300/50 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <MoreHorizontal className="w-4 h-4 text-slate-500" />
+                                            </button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" className="w-40">
+                                            <DropdownMenuItem
+                                                onClick={(e) => handlePinProject(project.id, e)}
+                                            >
+                                                <Pin className="w-4 h-4 mr-2" />
+                                                {project.isPinned ? '取消置顶' : '置顶'}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={(e) => handleArchiveProject(project.id, e)}
+                                            >
+                                                <Archive className="w-4 h-4 mr-2" />
+                                                {project.isArchived ? '取消归档' : '归档'}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuSeparator />
+                                            <DropdownMenuItem
+                                                variant="destructive"
+                                                onClick={(e) => handleDeleteProject(project.id, e)}
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-2" />
+                                                删除
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </div>
                             ))}
 
                             {hiddenCount > 0 && (

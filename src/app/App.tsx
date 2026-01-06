@@ -43,6 +43,7 @@ const defaultProject: Project = {
   date: '2024-12-30',
   status: '进行中',
   engineer: '王工',
+  reportType: '民标安全性',
 };
 
 export default function App() {
@@ -109,9 +110,14 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [reportEdges, currentProject.id]);
 
-  const handleProjectCreated = (projectName: string) => {
+  const handleProjectCreated = (projectName: string, newProject?: Project) => {
     setAnimatingProjectName(projectName);
     setIsAnimating(true);
+    
+    // 如果提供了新项目对象，立即更新 currentProject
+    if (newProject) {
+      setCurrentProject(newProject);
+    }
     
     // 新建项目时清空画布节点数据
     setCollectionNodes([]);
@@ -119,7 +125,7 @@ export default function App() {
     setReportNodes([]);
     setReportEdges([]);
     
-    // 动画完成后更新项目名称
+    // 动画完成后重置动画状态
     setTimeout(() => {
       setIsAnimating(false);
       setAnimatingProjectName('');
@@ -180,6 +186,7 @@ export default function App() {
               projectDate={currentProject.date}
               projectStatus={currentProject.status}
               engineer={currentProject.engineer}
+              reportType={currentProject.reportType}
               isAnimating={isAnimating} 
               animatingProjectName={animatingProjectName} 
             />
@@ -233,6 +240,7 @@ export default function App() {
                 <TabsContent value="collection" className="flex-1 m-0 p-0 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden">
                   <DataCollectionEditor
                     key={`collection-${currentProject.id}`}
+                    projectId={currentProject.id}
                     initialNodes={collectionNodes}
                     initialEdges={collectionEdges}
                     onNodesChange={setCollectionNodes}
@@ -243,6 +251,8 @@ export default function App() {
                 <TabsContent value="report" className="flex-1 m-0 p-0 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden">
                   <ReportEditor
                     key={`report-${currentProject.id}`}
+                    projectId={currentProject.id}
+                    collectionNodes={collectionNodes}
                     initialNodes={reportNodes}
                     initialEdges={reportEdges}
                     onNodesChange={setReportNodes}
