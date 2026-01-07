@@ -82,7 +82,9 @@ class ValidationSkill:
                 warnings.append("confidence_low")
 
         # Skill-specific rules
-        test_item = payload.get("test_item") or ""
+        test_item_val = payload.get("test_item")
+        test_item = str(test_item_val) if test_item_val is not None else ""
+        
         whitelist = skill_rules.get("test_item_whitelist", [])
         whitelist_mode = skill_rules.get("test_item_whitelist_mode", "error")
         if whitelist and test_item not in whitelist:
@@ -131,17 +133,24 @@ class ValidationSkill:
         unit_rules = skill_rules.get("unit_rules", {})
         normalize_map = unit_rules.get("normalize_map", {})
         unit = payload.get("test_unit")
-        if unit in normalize_map:
-            normalized["test_unit"] = normalize_map[unit]
-            unit = normalized["test_unit"]
-        allowed_units = unit_rules.get("allowed_units", [])
-        if allowed_units and unit not in allowed_units:
-            errors.append("unit_not_allowed")
+        
+        # Only validate unit rules if unit is a string (to avoid TypeError with unhashable types in sets/dicts)
+        if isinstance(unit, str):
+            if unit in normalize_map:
+                normalized["test_unit"] = normalize_map[unit]
+                unit = normalized["test_unit"]
+            allowed_units = unit_rules.get("allowed_units", [])
+            if allowed_units and unit not in allowed_units:
+                errors.append("unit_not_allowed")
 
-        semantic_rules = skill_rules.get("semantic_rules", {})
-        forbid_units = set(semantic_rules.get("forbid_units", []))
-        if unit in forbid_units:
-            errors.append("unit_forbidden")
+            semantic_rules = skill_rules.get("semantic_rules", {})
+            forbid_units = set(semantic_rules.get("forbid_units", []))
+            if unit in forbid_units:
+                errors.append("unit_forbidden")
+        else:
+            # If unit is present but not a string, we already added "invalid_type:test_unit" error above
+            semantic_rules = skill_rules.get("semantic_rules", {})
+
         for keyword in semantic_rules.get("forbid_keywords_in_test_item", []):
             if keyword and keyword in test_item:
                 errors.append("test_item_forbidden_keyword")
@@ -192,7 +201,7 @@ class ValidationSkill:
             text = str(value).strip()
             if not text:
                 return None
-            parts = re.findall(r"\\d{1,4}", text)
+            parts = re.findall(r"\d{1,4}", text)
             if not parts:
                 return None
             year = int(parts[0])

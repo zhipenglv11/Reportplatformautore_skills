@@ -43,7 +43,7 @@ export function ReportPreview({ isGenerating = false, chapters = [], onClose }: 
                             {isGenerating ? 'AI 正在生成报告...' : '报告预览'}
                         </h3>
                         <p className="text-xs text-slate-500">
-                            {isGenerating ? '请稍候' : '只展示表格块'}
+                            {isGenerating ? '请稍候' : '展示表格与文本块'}
                         </p>
                     </div>
                 </div>
@@ -148,6 +148,17 @@ export function ReportPreview({ isGenerating = false, chapters = [], onClose }: 
                                                             </table>
                                                         </div>
                                                     </div>
+                                                );
+                                            }
+
+                                            if (block.type === "text") {
+                                                return (
+                                                    <p
+                                                        key={`${chapter.chapter_id}-text-${index}`}
+                                                        className="text-xs leading-6 text-slate-900"
+                                                    >
+                                                        {block.text || "暂无文本"}
+                                                    </p>
                                                 );
                                             }
 

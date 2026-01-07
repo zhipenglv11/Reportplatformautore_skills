@@ -419,37 +419,99 @@ class ChapterGenerationSkill:
             test_item=None,
         )
 
+        CARBONATION_THRESHOLD = 6
+
         evidence_refs: List[Dict[str, Any]] = []
+        facts_used: Dict[str, Any] = {}
+        rules_fired: List[str] = []
+
+        def pick_value(record: Dict[str, Any], chain: List[str]) -> tuple[Optional[Any], Optional[str]]:
+            for key in chain:
+                if "." in key:
+                    parts = key.split(".")
+                    value: Any = record
+                    ok = True
+                    for part in parts:
+                        if isinstance(value, dict) and part in value:
+                            value = value.get(part)
+                        else:
+                            ok = False
+                            break
+                    if ok and value not in (None, "", []):
+                        return value, key
+                else:
+                    if key in record and record.get(key) not in (None, "", []):
+                        return record.get(key), key
+            return None, None
+
+        def pick_number(record: Dict[str, Any], chain: List[str]) -> tuple[Optional[float], Optional[str]]:
+            value, source = pick_value(record, chain)
+            number = self._as_number(value)
+            if number is None:
+                return None, None
+            return number, source
+
+        def extract_grade(value: Any) -> Optional[str]:
+            if value is None:
+                return None
+            text = str(value).strip()
+            if not text:
+                return None
+            match = re.search(r"(C\\d{2})", text.upper())
+            if match:
+                return match.group(1)
+            return text
+
+        field_chains = {
+            "method": ["raw_result.meta.test_method", "raw_result.test_method", "raw_result.method"],
+            "strength_value_mpa": ["strength_estimated_mpa", "raw_result.strength_estimated_mpa", "test_result"],
+            "carbonation_depth_avg_mm": ["carbonation_depth_avg_mm", "raw_result.carbonation_depth_avg_mm"],
+            "test_date": ["test_date", "raw_result.test_date"],
+            "casting_date": ["casting_date", "raw_result.construction_date"],
+            "design_grade": ["design_strength_grade", "component_type"],
+        }
+
+        table_strengths: List[float] = []
+        table_design_grades: List[str] = []
+        table_dataset = self._resolve_dataset("concrete_rebound_tests")
+        table_allow_empty_method = bool(table_dataset.get("allow_empty_method", False))
+
         concrete_types: List[str] = []
-        test_methods: List[str] = []
-        test_instruments: List[str] = []
-        correction_standards: List[str] = []
-        correction_factors: List[str] = []
-        evaluations: List[str] = []
+        methods: List[str] = []
+        instruments: List[str] = []
+        design_grades: List[str] = []
         strengths: List[float] = []
         carbonation_values: List[float] = []
-        design_grades: List[str] = []
-        age_days: List[int] = []
+        test_dates: List[date] = []
+        casting_dates: List[date] = []
+        correction_standards: List[str] = []
+        correction_factors: List[float] = []
+        evaluation_texts: List[str] = []
+        source_counter: Dict[str, Dict[str, int]] = {key: {} for key in field_chains}
 
         for record in records:
             raw_result = self._ensure_dict(record.get("raw_result"))
             raw_meta = self._ensure_dict(raw_result.get("meta"))
+            test_value_json = self._ensure_dict(record.get("test_value_json"))
             confirmed_result = (
                 self._ensure_dict(record.get("confirmed_result")) if use_confirmed_result else {}
             )
             confirmed_meta = (
                 self._ensure_dict(confirmed_result.get("meta")) if use_confirmed_result else {}
             )
-
             concrete_type = raw_meta.get("concrete_type")
             if concrete_type:
                 concrete_types.append(str(concrete_type))
-            test_method = raw_meta.get("test_method") or raw_result.get("test_method") or raw_result.get("method")
-            if test_method:
-                test_methods.append(str(test_method))
-            test_instrument = raw_meta.get("test_instrument")
-            if test_instrument:
-                test_instruments.append(str(test_instrument))
+
+            method_value, method_source = pick_value(record, field_chains["method"])
+            if method_value:
+                methods.append(str(method_value))
+                if method_source:
+                    source_counter["method"][method_source] = source_counter["method"].get(method_source, 0) + 1
+
+            instrument_value = raw_meta.get("test_instrument")
+            if instrument_value:
+                instruments.append(str(instrument_value))
 
             correction_standard = (
                 confirmed_meta.get("correction_standard_code")
@@ -460,69 +522,210 @@ class ChapterGenerationSkill:
                 correction_standards.append(str(correction_standard))
             correction_factor = confirmed_meta.get("strength_correction_factor")
             if correction_factor is not None:
-                correction_factors.append(str(correction_factor))
-            evaluation = (
+                try:
+                    correction_factors.append(float(correction_factor))
+                except (TypeError, ValueError):
+                    pass
+            evaluation_value = (
                 confirmed_meta.get("result_evaluation")
                 or confirmed_meta.get("evaluation_status")
                 or confirmed_meta.get("result_evaluation_text")
             )
-            if evaluation:
-                evaluations.append(str(evaluation))
+            if evaluation_value:
+                evaluation_texts.append(str(evaluation_value))
 
-            design_grade = (
-                record.get("design_strength_grade")
-                or raw_result.get("design_grade")
-                or record.get("component_type")
-            )
-            if design_grade:
-                design_grades.append(str(design_grade))
+            grade_value, grade_source = pick_value(record, field_chains["design_grade"])
+            grade_value = extract_grade(grade_value)
+            if grade_value:
+                design_grades.append(str(grade_value))
+                if grade_source:
+                    source_counter["design_grade"][grade_source] = source_counter["design_grade"].get(grade_source, 0) + 1
 
-            strength = (
-                self._as_number(record.get("strength_estimated_mpa"))
-                or self._as_number(raw_result.get("strength_estimated_mpa"))
-                or self._as_number(record.get("test_result"))
-            )
-            if strength is not None:
-                strengths.append(strength)
+            strength_value, strength_source = pick_number(record, field_chains["strength_value_mpa"])
+            if strength_value is not None:
+                strengths.append(strength_value)
+                if strength_source:
+                    source_counter["strength_value_mpa"][strength_source] = source_counter["strength_value_mpa"].get(strength_source, 0) + 1
 
-            carbonation = (
-                self._as_number(record.get("carbonation_depth_avg_mm"))
-                or self._as_number(raw_result.get("carbonation_depth_avg_mm"))
-            )
-            if carbonation is not None:
-                carbonation_values.append(carbonation)
+            carbonation_value, carbonation_source = pick_number(record, field_chains["carbonation_depth_avg_mm"])
+            if carbonation_value is not None:
+                carbonation_values.append(carbonation_value)
+                if carbonation_source:
+                    source_counter["carbonation_depth_avg_mm"][carbonation_source] = source_counter["carbonation_depth_avg_mm"].get(carbonation_source, 0) + 1
 
-            test_date = self._parse_date_value(record.get("test_date") or raw_result.get("test_date"))
-            casting_date = self._parse_date_value(record.get("casting_date") or raw_result.get("construction_date"))
-            if test_date and casting_date:
-                delta_days = (test_date - casting_date).days
-                if delta_days >= 0:
-                    age_days.append(delta_days)
+            test_date_value, test_date_source = pick_value(record, field_chains["test_date"])
+            test_date = self._parse_date_value(test_date_value)
+            if test_date:
+                test_dates.append(test_date)
+                if test_date_source:
+                    source_counter["test_date"][test_date_source] = source_counter["test_date"].get(test_date_source, 0) + 1
+
+            casting_date_value, casting_date_source = pick_value(record, field_chains["casting_date"])
+            casting_date = self._parse_date_value(casting_date_value)
+            if casting_date:
+                casting_dates.append(casting_date)
+                if casting_date_source:
+                    source_counter["casting_date"][casting_date_source] = source_counter["casting_date"].get(casting_date_source, 0) + 1
 
             evidence_refs.extend(record.get("evidence_refs") or [])
 
-        facts = {
-            "concrete_type": self._most_common_text(concrete_types),
-            "test_method": self._most_common_text(test_methods),
-            "test_instrument": self._most_common_text(test_instruments),
-            "strength_min_mpa": round(min(strengths), 1) if strengths else None,
-            "design_strength_grade": self._most_common_text(design_grades),
-            "carbonation_depth_over_6": min(carbonation_values) > 6 if carbonation_values else None,
-            "age_days_over_1000": min(age_days) > 1000 if age_days else None,
-            "correction_standard": self._most_common_text(correction_standards) or ruleset,
-            "strength_correction_factor": self._most_common_text(correction_factors),
-            "evaluation": self._most_common_text(evaluations),
+            if record.get("test_item") in table_dataset.get("test_items", []):
+                method = self._normalize_method(self._extract_method(test_value_json, raw_result))
+                if method or table_allow_empty_method:
+                    if not method or table_dataset["method_keyword"] in method:
+                        table_strength = (
+                            self._as_number(record.get("strength_estimated_mpa"))
+                            or self._as_number(raw_result.get("strength_estimated_mpa"))
+                            or self._as_number(record.get("test_result"))
+                        )
+                        if table_strength is not None:
+                            table_strengths.append(table_strength)
+                        table_grade = (
+                            record.get("design_strength_grade")
+                            or test_value_json.get("design_grade")
+                            or raw_result.get("design_grade")
+                            or raw_result.get("设计强度等级")
+                            or record.get("component_type")
+                        )
+                        if table_grade:
+                            table_design_grades.append(str(table_grade))
+
+        def summarize_sources(field_key: str) -> Optional[str]:
+            candidates = source_counter.get(field_key) or {}
+            if not candidates:
+                return None
+            return sorted(candidates.items(), key=lambda item: (-item[1], item[0]))[0][0]
+
+        for key, chain in field_chains.items():
+            facts_used[key] = {
+                "chain": chain,
+                "source": summarize_sources(key),
+            }
+
+        common_concrete_type = self._most_common_text(concrete_types)
+        common_method = self._most_common_text(methods)
+        common_instrument = self._most_common_text(instruments)
+        common_design_grade = self._most_common_text(table_design_grades) or self._most_common_text(design_grades)
+
+        strength_source = table_strengths if table_strengths else strengths
+        strength_min = round(min(strength_source), 1) if strength_source else None
+        strength_avg = round(sum(strength_source) / len(strength_source), 1) if strength_source else None
+        strength_count = len(strength_source)
+        carbonation_avg = round(sum(carbonation_values) / len(carbonation_values), 1) if carbonation_values else None
+
+        age_days_value = None
+        if test_dates and casting_dates:
+            test_date = min(test_dates)
+            casting_date = min(casting_dates)
+            delta_days = (test_date - casting_date).days
+            if delta_days >= 0:
+                age_days_value = delta_days
+
+        correction_standard = self._most_common_text(correction_standards) or ruleset
+        correction_factor = None
+        if correction_factors:
+            correction_factor = round(sum(correction_factors) / len(correction_factors), 2)
+        evaluation_text = self._most_common_text(evaluation_texts)
+
+        test_date_for_fact = min(test_dates) if test_dates else None
+        casting_date_for_fact = min(casting_dates) if casting_dates else None
+
+        facts: Dict[str, Any] = {
+            "concrete_type": common_concrete_type,
+            "method": common_method,
+            "instrument": common_instrument,
+            "design_grade": common_design_grade,
+            "strength_value_mpa": strength_min if strength_min is not None else strength_avg,
+            "strength_stat": {
+                "min_mpa": strength_min,
+                "avg_mpa": strength_avg,
+                "n": strength_count,
+            },
+            "carbonation_depth_avg_mm": carbonation_avg,
+            "test_date": self._normalize_date_text(test_date_for_fact) if test_date_for_fact else None,
+            "casting_date": self._normalize_date_text(casting_date_for_fact) if casting_date_for_fact else None,
+            "age_days": age_days_value,
+            "correction": {
+                "standard": correction_standard,
+                "factor": correction_factor,
+                "eval_text": evaluation_text,
+            },
             "sample_scope": chapter_config.get("sample_scope") or "混凝土构件",
+            "evidence_refs": self._dedupe_evidence(evidence_refs),
         }
 
+        if age_days_value is not None and age_days_value > 1000:
+            rules_fired.append("age_days_over_1000")
+        if carbonation_avg is not None and carbonation_avg >= CARBONATION_THRESHOLD:
+            rules_fired.append("carbonation_over_threshold")
+
+        def render_description_text(facts_data: Dict[str, Any], table_ref_value: str) -> str:
+            sentences: List[str] = []
+            concrete_type = facts_data.get("concrete_type") or "混凝土"
+            method_text = facts_data.get("instrument") or facts_data.get("method")
+            sample_scope = facts_data.get("sample_scope") or "混凝土构件"
+            if method_text:
+                sentences.append(
+                    f"鉴定对象采用{concrete_type}，现场采用{method_text}对{sample_scope}强度进行抽测。"
+                )
+            else:
+                sentences.append(
+                    f"鉴定对象采用{concrete_type}，对{sample_scope}强度进行抽测。"
+                )
+
+            condition_parts: List[str] = []
+            if facts_data.get("age_days") is not None:
+                condition_parts.append(f"由于混凝土龄期已超过{facts_data.get('age_days')}天")
+            if facts_data.get("carbonation_depth_avg_mm") is not None:
+                if facts_data.get("carbonation_depth_avg_mm") >= CARBONATION_THRESHOLD:
+                    condition_parts.append(f"碳化深度均大于{CARBONATION_THRESHOLD}mm")
+                else:
+                    condition_parts.append(f"碳化深度平均值为{facts_data.get('carbonation_depth_avg_mm')}mm")
+
+            correction = facts_data.get("correction") or {}
+            correction_parts: List[str] = []
+            if correction.get("standard"):
+                correction_parts.append(f"依据{correction.get('standard')}进行修正")
+            if correction.get("factor") is not None:
+                correction_parts.append(f"混凝土强度修正系数取{correction.get('factor')}")
+            if table_ref_value:
+                correction_parts.append(f"抽测结果见{table_ref_value}")
+
+            middle_sentence = "，".join([part for part in condition_parts + correction_parts if part])
+            if middle_sentence:
+                sentences.append(middle_sentence + "。")
+
+            strength_stat = facts_data.get("strength_stat") or {}
+            min_mpa = strength_stat.get("min_mpa")
+            value_mpa = min_mpa if min_mpa is not None else facts_data.get("strength_value_mpa")
+            design_grade = facts_data.get("design_grade")
+            if value_mpa is not None and design_grade:
+                design_value = self._parse_design_grade(design_grade)
+                evaluation = correction.get("eval_text")
+                if evaluation is None and design_value is not None:
+                    evaluation = "符合设计要求" if value_mpa >= design_value else "不符合设计要求"
+                if evaluation is None:
+                    evaluation = ""
+                sentences.append(
+                    f"由{table_ref_value or '抽测数据'}可知，抽测的混凝土构件抗压强度最小值为{value_mpa}MPa，{evaluation}。"
+                )
+            elif value_mpa is not None:
+                sentences.append(
+                    f"抽测的混凝土抗压强度为{value_mpa}MPa。"
+                )
+
+            return "".join(sentences)
+
         table_ref = chapter_config.get("table_ref") or dataset.get("table_ref") or "表7"
-        description_text = self._build_strength_description_text(facts, table_ref)
+        description_text = render_description_text(facts, table_ref)
 
         blocks = [
             {
                 "type": "text",
                 "text": description_text,
                 "facts": facts,
+                "facts_used": facts_used,
+                "rules_fired": rules_fired,
             }
         ]
 

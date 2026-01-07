@@ -1,37 +1,50 @@
 node_modules
 
-# Database files
-*.db
-
-# Virtual environment
-backend/venv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
 
 # Environment variables
 .env
 .env.local
 .env.*.local
 
-# Python compiled files
-*.pyc
-__pycache__/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# IDE configuration
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
-# Operating system files
-Thumbs.db
+# OS
 .DS_Store
+Thumbs.db
 
-# Log files
-*.log
-
-# Build files
+# Build outputs
 dist/
 build/
+*.egg-info/
 
-# Temporary files
-*.tmp
-*.temp
-.temp/
-.tmp/
+# Logs
+*.log
+logs/
+
+# Data files (generated)
+data/parsed/
+data/uploads/
+
+# Archives
+*.zip
+*.tar.gz

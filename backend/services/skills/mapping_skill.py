@@ -295,7 +295,7 @@ class MappingSkill:
         text = str(value).strip()
         if not text:
             return None
-        parts = re.findall(r"\\d{1,4}", text)
+        parts = re.findall(r"\d{1,4}", text)
         if not parts:
             return None
         year = int(parts[0])

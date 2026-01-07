@@ -47,6 +47,44 @@ interface DataCollectionEditorProps {
   onEdgesChange: (edges: Edge[]) => void;
 }
 
+// 获取项目存储的 key
+const getStorageKey = (projectId: string, type: string) => `project_${projectId}_${type}`;
+
+// 从 localStorage 加载数据
+const loadFromStorage = <T,>(key: string, defaultValue: T): T => {
+  try {
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load from storage:', e);
+  }
+  return defaultValue;
+};
+
+// 保存数据到 localStorage
+const saveToStorage = (key: string, data: any) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.error('Failed to save to storage:', e);
+  }
+};
+
+// 序列化文件数据（移除不能序列化的字段）
+const serializeFileData = (files: Record<string, any[]>): Record<string, any[]> => {
+  const serialized: Record<string, any[]> = {};
+  Object.keys(files).forEach(nodeId => {
+    serialized[nodeId] = files[nodeId].map(file => {
+      // 移除 File 对象和 blob URL，只保留可序列化的元数据
+      const { file: _file, url: _url, ...rest } = file;
+      return rest;
+    });
+  });
+  return serialized;
+};
+
 export default function DataCollectionEditor({ 
   projectId,
   initialNodes, 
@@ -58,15 +96,69 @@ export default function DataCollectionEditor({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedNode, setSelectedNode] = useState<any>(null);
   
-  // 文件上传和分析状态
-  const [uploadedFiles, setUploadedFiles] = useState<Record<string, any[]>>({});
-  const [analysisResults, setAnalysisResults] = useState<Record<string, any>>({});
-  const [templateSelections, setTemplateSelections] = useState<Record<string, Record<string, string>>>({});
+  // 从 localStorage 加载文件上传和分析状态
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, any[]>>(() => {
+    return loadFromStorage(getStorageKey(projectId, 'collectionUploadedFiles'), {});
+  });
+  const [analysisResults, setAnalysisResults] = useState<Record<string, any>>(() => {
+    return loadFromStorage(getStorageKey(projectId, 'collectionAnalysisResults'), {});
+  });
+  const [templateSelections, setTemplateSelections] = useState<Record<string, Record<string, string>>>(() => {
+    return loadFromStorage(getStorageKey(projectId, 'collectionTemplateSelections'), {});
+  });
+
+  // 当项目切换时，重新加载状态
+  useEffect(() => {
+    const savedFiles = loadFromStorage(getStorageKey(projectId, 'collectionUploadedFiles'), {});
+    const savedResults = loadFromStorage(getStorageKey(projectId, 'collectionAnalysisResults'), {});
+    const savedSelections = loadFromStorage(getStorageKey(projectId, 'collectionTemplateSelections'), {});
+    
+    setUploadedFiles(savedFiles);
+    setAnalysisResults(savedResults);
+    setTemplateSelections(savedSelections);
+    isInitialMountRef.current = true; // 重置初始挂载标志
+  }, [projectId]);
 
   // 使用 ref 来跟踪是否是内部更新，避免循环同步
   const isInternalUpdateRef = useRef(false);
   const initialNodesRef = useRef(initialNodes);
   const initialEdgesRef = useRef(initialEdges);
+  const isInitialMountRef = useRef(true);
+
+  // 自动保存文件上传状态到 localStorage（带防抖）
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      const serialized = serializeFileData(uploadedFiles);
+      saveToStorage(getStorageKey(projectId, 'collectionUploadedFiles'), serialized);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [uploadedFiles, projectId]);
+
+  // 自动保存分析结果到 localStorage（带防抖）
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      saveToStorage(getStorageKey(projectId, 'collectionAnalysisResults'), analysisResults);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [analysisResults, projectId]);
+
+  // 自动保存模板选择到 localStorage（带防抖）
+  useEffect(() => {
+    if (isInitialMountRef.current) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      saveToStorage(getStorageKey(projectId, 'collectionTemplateSelections'), templateSelections);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [templateSelections, projectId]);
 
   // 当父组件传入的初始数据改变时（比如切换项目），同步到本地状态
   useEffect(() => {

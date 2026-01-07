@@ -379,47 +379,6 @@ export default function CollectionDetailModal({
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto">
-
-                {selectedFile?.preview_chunks?.length > 0 && (
-                  <div className="p-4 pb-0">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">模板选择</h4>
-                    <div className="space-y-2">
-                      {selectedFile.preview_chunks.map((chunk: any) => {
-                        const selectedValue = getChunkTemplateValue(selectedFile, chunk);
-                        return (
-                          <div key={chunk.chunk_id} className="flex items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs text-slate-600">
-                                {Array.isArray(chunk.page_range) ? chunk.page_range.join('-') : chunk.chunk_id}
-                              </div>
-                              {chunk.record_code && (
-                                <div className="text-[10px] text-slate-500 mt-0.5">
-                                  控制编号 {chunk.record_code}
-                                </div>
-                              )}
-                            </div>
-                            {!selectedValue && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">
-                                需要选择
-                              </span>
-                            )}
-                            <select
-                              className="text-[10px] border border-slate-200 rounded px-2 py-1 bg-white text-slate-600"
-                              value={selectedValue}
-                              onChange={(e) => onTemplateSelectionChange?.(selectedFile.id, chunk.chunk_id, e.target.value)}
-                            >
-                              {templateOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
                 {/* File List */}
                 <div className="p-3 space-y-2">
                   {uploadedFiles.map((file) => {
