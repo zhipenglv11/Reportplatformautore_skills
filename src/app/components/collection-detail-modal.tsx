@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Upload, Image as ImageIcon, FileText, Download, BarChart3, CheckCircle, AlertCircle, Loader2, Move, Settings, Database, Trash2, MessageSquare, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { X, Upload, Image as ImageIcon, FileText, Download, BarChart3, CheckCircle, AlertCircle, Loader2, Move, Settings, Database, Trash2, MessageSquare, ZoomIn, ZoomOut, RotateCcw, Sparkles, Code, LayoutList } from 'lucide-react';
+import SkillSelector from './skill-selector';
 
 interface FileItem {
   id: string;
@@ -13,6 +14,7 @@ interface FileItem {
   error?: string;
   object_key?: string;
   source_hash?: string;
+  skill_name?: string;
   file_type?: string;
   parse_result?: any;
   validation_result?: {
@@ -27,6 +29,7 @@ interface FileItem {
   confirmed?: boolean;
   preview_chunks?: any[];
   commit_results?: any[];
+  skill_result?: any;
 }
 
 interface AnalysisData {
@@ -46,15 +49,17 @@ interface CollectionDetailModalProps {
     nodeId: string;
     nodeLabel: string;
     analyzedAt: string;
-    jsonData: any; // 原始JSON数据
+    jsonData: any; // 原始JSON format is preserved on save
   } | null;
   onUpload: (nodeId: string, nodeLabel: string, prompt?: string) => void;
-  onAnalyze: (nodeId: string, nodeData: any, prompt?: string, templateMap?: Record<string, string>) => Promise<void>;
-  onConfirm: (nodeId: string, file: FileItem) => Promise<void>;
-  onRetryChunks?: (nodeId: string, file: FileItem, chunkIds: string[]) => Promise<void>;
+  onAnalyze: (
+    nodeId: string,
+    nodeData: any,
+    options?: { prompt?: string; skillName?: string; targetFileId?: string }
+  ) => Promise<void>;
   onRemoveFile: (fileId: string) => void;
-  templateSelections?: Record<string, Record<string, string>>;
-  onTemplateSelectionChange?: (fileId: string, chunkId: string, templateId: string) => void;
+  onUpdateAnalysisResult?: (fileId: string, data: any[]) => void;
+  projectId?: string; // 项目ID（用于编排）
 }
 
 export default function CollectionDetailModal({
@@ -64,41 +69,23 @@ export default function CollectionDetailModal({
   analysisResult,
   onUpload,
   onAnalyze,
-  onConfirm,
-  onRetryChunks,
   onRemoveFile,
-  templateSelections = {},
-  onTemplateSelectionChange,
+  onUpdateAnalysisResult,
+  projectId,
 }: CollectionDetailModalProps) {
   const [selectedFile, setSelectedFile] = useState<FileItem | null>(uploadedFiles[0] || null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
   const [middlePanelOffset, setMiddlePanelOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const [customPrompt, setCustomPrompt] = useState<string>('');
   const [pdfZoom, setPdfZoom] = useState(1); // PDF缩放比例，默认100%
-
-  const [fileTemplateMap, setFileTemplateMap] = useState<Record<string, string>>({});
-
-  const templateOptions = [
-    { value: 'concrete_strength_v1', label: '混凝土强度结果表', controlCode: 'KSQR-4.13-XC-10' },
-    { value: 'rebound_record_v1', label: '回弹原始记录表', controlCode: 'KJQR-056-215' },
-  ];
-
-  const handleTemplateChange = (fileId: string, value: string) => {
-    setFileTemplateMap((prev) => ({ ...prev, [fileId]: value }));
-  };
-
-  const getTemplateLabel = (value: string) => {
-    const match = templateOptions.find((option) => option.value === value);
-    return match ? match.label : '请选择识别模板';
-  };
-
-  const getTemplateCode = (value: string) => {
-    const match = templateOptions.find((option) => option.value === value);
-    return match ? match.controlCode : '';
-  };
+  const [selectedSkill, setSelectedSkill] = useState<string>('');
+  const [isExecutingSkill, setIsExecutingSkill] = useState(false);
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [editedJsonByFile, setEditedJsonByFile] = useState<Record<string, string>>({});
+  const [jsonErrorsByFile, setJsonErrorsByFile] = useState<Record<string, string | null>>({});
+  const [viewMode, setViewMode] = useState<'form' | 'json'>('form');
 
   // 当文件列表变化时，更新选中文件
   useEffect(() => {
@@ -128,7 +115,7 @@ export default function CollectionDetailModal({
     setPdfZoom(1);
   }, [selectedFile?.id]);
 
-  const MIDDLE_PANEL_WIDTH = 450; // 中间栏固定宽度
+  const MIDDLE_PANEL_WIDTH = 340; // 中间栏固定宽度
   const MIN_SIDE_MARGIN = 100; // 左右两侧最小留白距离
 
   // 初始化中间栏位置
@@ -158,46 +145,74 @@ export default function CollectionDetailModal({
     onUpload(node.id, node.data.label, customPrompt.trim() || undefined);
   };
 
-  const handleAnalyzeClick = async () => {
+
+  const handleExecuteSkill = async () => {
+    if (!selectedSkill || !selectedFile?.file) {
+      alert('Please select a skill and file.');
+      return;
+    }
+
+    setIsExecutingSkill(true);
+    try {
+      await onAnalyze(node.id, node.data, {
+        prompt: customPrompt.trim() || undefined,
+        skillName: selectedSkill,
+        targetFileId: selectedFile.id,
+      });
+    } finally {
+      setIsExecutingSkill(false);
+    }
+  };
+
+  // 智能编排：批量处理所有文件，自动识别类型并路由
+  const handleOrchestrate = async () => {
     if (uploadedFiles.length === 0) {
       alert('请先上传文件');
       return;
     }
 
-    // 检查是否有未选择模板的文件
-    const missingTemplateFiles = uploadedFiles.filter(file => !fileTemplateMap[file.id]);
-    if (missingTemplateFiles.length > 0) {
-      alert(`请先为以下文件选择识别模板：\n${missingTemplateFiles.map(f => f.name).join('\n')}`);
-      return;
-    }
-
-    setIsAnalyzing(true);
+    setIsOrchestrating(true);
     try {
-      // 传递 fileTemplateMap 给父组件处理
-      await onAnalyze(node.id, node.data, customPrompt.trim() || undefined, fileTemplateMap as any);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
+      const formData = new FormData();
+      
+      // 添加所有文件
+      uploadedFiles.forEach((fileItem) => {
+        if (fileItem.file) {
+          formData.append('files', fileItem.file);
+        }
+      });
+      
+      formData.append('project_id', projectId || node.id);
+      formData.append('node_id', node.id);
+      formData.append('persist_result', 'true');
+      formData.append('use_llm_classification', 'true');
 
-  const handleConfirmClick = async () => {
-    if (!selectedFile) {
-      alert('请选择一个文件');
-      return;
-    }
-    if (!selectedFile.preview_chunks || selectedFile.preview_chunks.length === 0) {
-      alert('??????????????????????????????????????????');
-      return;
-    }
-    if (selectedFile.confirmed) {
-      alert('该文件已经确认过了');
-      return;
-    }
-    setIsConfirming(true);
-    try {
-      await onConfirm(node.id, selectedFile);
+      const response = await fetch('/api/skill/orchestrate', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || errorData.message || '编排执行失败');
+      }
+
+      const result = await response.json();
+      
+      // 显示结果
+      const successCount = result.successful || 0;
+      const failCount = result.failed || 0;
+      alert(`智能编排完成！\n成功: ${successCount} 个文件\n失败: ${failCount} 个文件`);
+      
+      // 更新文件状态（需要根据实际结果更新）
+      // 这里可以调用 onAnalyze 或直接更新状态
+      console.log('编排结果:', result);
+      
+    } catch (error: any) {
+      console.error('编排执行失败:', error);
+      alert(`执行失败: ${error.message}`);
     } finally {
-      setIsConfirming(false);
+      setIsOrchestrating(false);
     }
   };
 
@@ -239,17 +254,86 @@ export default function CollectionDetailModal({
     return { text: '未解析', className: 'bg-slate-100 text-slate-600' };
   };
 
-  const getChunkTemplateValue = (file: FileItem, chunk: any) => {
-    const fileSelections = templateSelections[file.id] || {};
-    return fileSelections[chunk.chunk_id] || chunk.suggested_template_id || '';
-  };
-
   const selectedJsonItem = Array.isArray(analysisResult?.jsonData) && selectedFile
     ? analysisResult?.jsonData.find((item: any) => item.fileId === selectedFile.id)
     : null;
-  const hasMissingSelection = !!(selectedFile?.preview_chunks || []).find(
-    (chunk: any) => !getChunkTemplateValue(selectedFile as FileItem, chunk)
-  );
+
+  const getJsonText = (fileId: string, data: any) => {
+    if (editedJsonByFile[fileId] !== undefined) {
+      return editedJsonByFile[fileId];
+    }
+    return JSON.stringify(data ?? null, null, 2);
+  };
+
+  const handleJsonChange = (fileId: string, value: string) => {
+    setEditedJsonByFile((prev) => ({ ...prev, [fileId]: value }));
+    setJsonErrorsByFile((prev) => ({ ...prev, [fileId]: null }));
+  };
+
+  const handleJsonSave = (fileId: string, rawValue: string) => {
+    if (!onUpdateAnalysisResult) {
+      return;
+    }
+    try {
+      const parsed = JSON.parse(rawValue);
+      const normalized = Array.isArray(parsed) ? parsed : [parsed];
+      onUpdateAnalysisResult(fileId, normalized);
+      setJsonErrorsByFile((prev) => ({ ...prev, [fileId]: null }));
+    } catch (error: any) {
+      setJsonErrorsByFile((prev) => ({
+        ...prev,
+        [fileId]: error?.message || 'Invalid JSON',
+      }));
+    }
+  };
+
+  const handleConfirmResult = async () => {
+    if (!selectedFile) {
+      return;
+    }
+    const skillName = selectedFile.skill_name || selectedSkill;
+    if (!skillName) {
+      alert('请先选择技能');
+      return;
+    }
+    const jsonText = getJsonText(selectedFile.id, selectedJsonItem?.data);
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch (error: any) {
+      alert(`JSON 格式错误：${error?.message || '无法解析'}`);
+      return;
+    }
+
+    const records = Array.isArray(parsed) ? parsed : [parsed];
+    const payload = {
+      project_id: projectId || node.id,
+      node_id: node.id,
+      run_id: selectedFile.run_id,
+      source_hash: selectedFile.source_hash,
+      skill_name: skillName,
+      records,
+    };
+
+    setIsConfirming(true);
+    try {
+      const response = await fetch('/api/skill/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        throw new Error(errorData.detail || errorData.message || '确认失败');
+      }
+      setSelectedFile({ ...selectedFile, confirmed: true });
+    } catch (error: any) {
+      console.error('Confirm failed:', error);
+      alert(`确认失败：${error?.message || '未知错误'}`);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -278,9 +362,97 @@ export default function CollectionDetailModal({
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 90) return 'text-green-600 bg-green-100';
-    if (confidence >= 70) return 'text-amber-600 bg-amber-100';
-    return 'text-red-600 bg-red-100';
+    // Adapter for both 0-1 and 0-100 scales
+    const score = confidence <= 1 ? confidence : confidence / 100;
+    
+    if (score >= 0.8) return 'text-green-600 bg-green-50 border-green-200';
+    if (score >= 0.6) return 'text-amber-600 bg-amber-50 border-amber-200';
+    return 'text-red-600 bg-red-50 border-red-200';
+  };
+
+  const renderFormView = (fileId: string, jsonString: string) => {
+    let data: any;
+    try {
+      data = JSON.parse(jsonString);
+    } catch (e) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8 text-slate-400 bg-slate-50 rounded-lg border border-slate-200 border-dashed">
+           <AlertCircle className="w-8 h-8 mb-2 text-rose-400"/>
+           <p className="text-sm">数据格式错误，无法显示表单视图</p>
+           <button onClick={() => setViewMode('json')} className="mt-2 text-blue-600 hover:underline text-xs">切换到代码模式修复</button>
+        </div>
+      );
+    }
+    
+    // Support single object or array of objects
+    const items = Array.isArray(data) ? data : (typeof data === 'object' && data !== null ? [data] : []);
+
+    if (items.length === 0) {
+         return <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 rounded-lg border border-slate-200 border-dashed">暂无数据结构</div>;
+    }
+
+    const handleFieldUpdate = (itemIndex: number, key: string, value: string) => {
+        const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+        newData[itemIndex][key] = value;
+        const finalData = Array.isArray(data) ? newData : newData[0];
+        handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+    };
+    
+    // Save on blur using the current data in the closure (fresh on re-render)
+    const handleSaveCurrent = () => {
+         handleJsonSave(fileId, JSON.stringify(data, null, 2)); 
+    };
+
+    return (
+      <div className="space-y-3">
+        {items.map((item: any, idx: number) => {
+          // Try to get confidence from item (if exists) or mock it for design if missing (optional)
+          // For now, we only show if it exists or if we decide to default.
+          const confidence = item.confidence !== undefined ? Number(item.confidence) : null;
+          
+          return (
+          <div key={idx} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200">
+            <div className="bg-slate-50/80 px-3 py-1.5 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
+                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ring-2 ring-blue-100"></div>
+                    记录 #{idx + 1}
+                 </span>
+                 {/* Confidence Badge */}
+                 {confidence !== null && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1 ${getConfidenceColor(confidence)}`}>
+                        <Sparkles className="w-3 h-3" />
+                        {confidence <= 1 ? Math.round(confidence * 100) : confidence}% 置信度
+                    </span>
+                 )}
+            </div>
+            <div className="divide-y divide-slate-50">
+               {Object.entries(item).map(([key, val]) => {
+                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence';
+                   if (isSystem) return null;
+
+                   return ( 
+                     <div key={key} className="flex flex-col sm:flex-row group bg-white hover:bg-slate-50/60 transition-colors">
+                        <div className="sm:w-[35%] px-3 py-1.5 flex items-center">
+                            <span className="text-[11px] font-medium text-slate-600 truncate select-none leading-4" title={key}>{key}</span>
+                        </div>
+                        <div className="sm:w-[65%] flex items-center relative">
+                           <div className="hidden sm:block absolute left-0 top-3 bottom-3 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                           <input 
+                              type="text" 
+                              className="w-full h-full px-3 py-1.5 text-[11px] leading-4 text-slate-800 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-medium"
+                              value={val as string}
+                              onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
+                              onBlur={handleSaveCurrent}
+                           /> 
+                        </div>
+                     </div>
+                   );
+               })}
+            </div>
+          </div>
+        )})}
+      </div>
+    );
   };
 
   const handleMiddlePanelDragStart = (e: React.MouseEvent) => {
@@ -383,7 +555,6 @@ export default function CollectionDetailModal({
                 <div className="p-3 space-y-2">
                   {uploadedFiles.map((file) => {
                     const statusBadge = getParseStatus(file.status);
-                      const selectedTemplate = fileTemplateMap[file.id] || '';
                       return (
                         <div
                           key={file.id}
@@ -408,16 +579,6 @@ export default function CollectionDetailModal({
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded ${statusBadge.className}`}>
                                   {statusBadge.text}
                                 </span>
-                                {selectedTemplate && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
-                                    {getTemplateLabel(selectedTemplate)}
-                                  </span>
-                                )}
-                                {getTemplateCode(selectedTemplate) && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                                    控制编号 {getTemplateCode(selectedTemplate)}
-                                  </span>
-                                )}
                                 {file.confirmed && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
                                     已确认
@@ -430,22 +591,6 @@ export default function CollectionDetailModal({
                                 )}
                               </div>
                               
-                              <div className="mt-2">
-                                <select
-                                  className="text-[10px] border border-slate-200 rounded px-2 py-1 bg-white text-slate-600 w-full"
-                                  value={selectedTemplate}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => handleTemplateChange(file.id, e.target.value)}
-                                >
-                                  <option value="">请选择模板</option>
-                                  {templateOptions.map((option) => (
-                                    <option key={option.value} value={option.value}>
-                                      {option.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-
                               <div className="flex items-center justify-between mt-2">
                                 <p className="text-xs text-slate-500">
                                   {formatFileSize(file.size)}
@@ -563,25 +708,22 @@ export default function CollectionDetailModal({
               <Move className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4">
               {/* File Upload Section - 移到这里 */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
                   文件上传
                 </h4>
                 
-                <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer">
-                  <Upload className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-700 mb-1">
-                    点击上传或拖拽文件
-                  </p>
-                  <p className="text-xs text-slate-500 mb-3">
-                    支持图片、PDF格式
-                  </p>
+                <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer flex flex-col items-center">
+                  <div className="flex items-center justify-center gap-3 mb-2">
+                     <Upload className="w-5 h-5 text-slate-400" />
+                     <span className="text-xs text-slate-600">点击上传或拖拽文件 (PDF/图片)</span>
+                  </div>
                   <button
                     onClick={handleUploadClick}
-                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors text-xs font-medium inline-flex items-center gap-2"
+                    className="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-xs font-medium inline-flex items-center justify-center gap-2"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     选择文件
@@ -589,63 +731,106 @@ export default function CollectionDetailModal({
                 </div>
 
                 {uploadedFiles.length > 0 && (
-                  <div className="mt-2 text-xs text-slate-500">
+                  <div className="mt-1.5 text-xs text-slate-500 text-center">
                     已选择 {uploadedFiles.length} 个文件
                   </div>
                 )}
               </div>
 
               {/* Analysis Control Section - 移到这里 */}
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                  <div className="w-1 h-4 bg-emerald-600 rounded-full"></div>
-                  数据分析
+              
+              {/* Agent Orchestration Section - 智能编排 */}
+              {uploadedFiles.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    智能编排 (Agent)
+                  </h4>
+
+                  <div className="border border-purple-200 rounded-lg p-3 bg-gradient-to-br from-purple-50 to-pink-50">
+                    <button
+                      onClick={handleOrchestrate}
+                      disabled={isOrchestrating || uploadedFiles.length === 0}
+                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded shadow-sm transition-all text-xs font-medium flex items-center justify-center gap-2"
+                    >
+                      {isOrchestrating ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          处理中...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5" />
+                          智能编排处理 ({uploadedFiles.length})
+                        </>
+                      )}
+                    </button>
+                    <p className="text-[10px] text-purple-600/70 mt-1.5 text-center">
+                      自动识别文件类型并路由到对应技能
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Declarative Skill Section - 手动选择技能 */}
+              <div className="mb-4">
+                <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                  <div className="w-1 h-4 bg-indigo-600 rounded-full"></div>
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  手动选择技能
                 </h4>
-                
-                <div className="border border-emerald-200 rounded-lg p-4 bg-gradient-to-br from-emerald-50 to-teal-50">
-                  <p className="text-xs text-slate-700 mb-3">
-                    使用AI智能识别上传文件中的数据字段
-                  </p>
-                  
+
+                <div className="border border-indigo-200 rounded-lg p-3 bg-gradient-to-br from-indigo-50 to-purple-50">
+                  <div className="mb-2">
+                    <SkillSelector
+                      selectedSkill={selectedSkill}
+                      onSkillSelect={(skillName) => setSelectedSkill(skillName)}
+                      showOnlyDeclarative={true}
+                      groupFilter="info_collection"
+                    />
+                  </div>
+
                   <button
-                    onClick={handleAnalyzeClick}
-                    disabled={isAnalyzing || uploadedFiles.length === 0}
-                    className="w-full px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-xs font-medium flex items-center justify-center gap-2"
+                    onClick={handleExecuteSkill}
+                    disabled={isExecutingSkill || !selectedSkill || !selectedFile?.file}
+                    className="w-full px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded shadow-sm transition-colors text-xs font-medium flex items-center justify-center gap-2"
                   >
-                    {isAnalyzing ? (
+                    {isExecutingSkill ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        正在分析数据...
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        执行中...
                       </>
                     ) : (
                       <>
-                        <BarChart3 className="w-4 h-4" />
-                        开始数据分析
+                        <Sparkles className="w-3.5 h-3.5" />
+                        执行技能
                       </>
                     )}
                   </button>
 
-                  {uploadedFiles.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-2 text-center">
-                      请先上传文件
+                  {!selectedSkill && (
+                    <p className="text-[10px] text-amber-600 mt-1.5 text-center">
+                      请选择一个技能以继续
                     </p>
                   )}
                 </div>
               </div>
 
+
               {/* Custom Prompt Configuration */}
-              <div className="mb-6">
-                <div className="flex items-center justify-between mb-3">
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                     <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
                     <MessageSquare className="w-4 h-4 text-purple-600" />
                     自定义提示词
                   </h4>
-                  <span className="text-xs text-slate-500">
+                  <span className="text-[10px] text-slate-500">
                     {customPrompt.trim() ? (
-                      <span className="text-green-600">✓ 将使用自定义提示词</span>
+                      <span className="text-green-600">✓ 已启用</span>
                     ) : (
-                      <span>留空则使用默认提示词</span>
+                      <span>可选</span>
                     )}
                   </span>
                 </div>
@@ -654,33 +839,33 @@ export default function CollectionDetailModal({
                   <textarea
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="输入自定义提示词，用于指导AI解析数据。例如：&#10;&quot;从图片中提取混凝土强度数据，包括试块编号、抗压强度值（单位：MPa）、养护天数、测试日期等信息，以JSON格式输出。&quot;"
-                    className="w-full px-3 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-200 resize-none"
-                    rows={5}
+                    placeholder="输入自定义提示词，用于指导AI解析数据。"
+                    className="w-full px-3 py-2 text-xs text-slate-700 placeholder:text-slate-400 border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-200 resize-none leading-relaxed"
+                    rows={3}
                   />
                 </div>
               </div>
 
               {/* Additional Options */}
               <div>
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-slate-600 rounded-full"></div>
                   其他选项
                 </h4>
                 
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" className="w-3.5 h-3.5 text-blue-600 rounded" />
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
                     <span className="text-xs text-slate-700">自动保存分析结果</span>
                   </label>
                   
-                  <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" className="w-3.5 h-3.5 text-blue-600 rounded" />
+                  <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
                     <span className="text-xs text-slate-700">导出为Excel格式</span>
                   </label>
 
-                  <label className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-lg border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
-                    <input type="checkbox" className="w-3.5 h-3.5 text-blue-600 rounded" defaultChecked />
+                  <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                    <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" defaultChecked />
                     <span className="text-xs text-slate-700">显示置信度评分</span>
                   </label>
                 </div>
@@ -746,139 +931,123 @@ export default function CollectionDetailModal({
                   </div>
                 )}
 
-                {selectedFile?.commit_results?.length > 0 && (
-                  <div className="p-4 pb-0">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-slate-700">????</h4>
-                      {onRetryChunks && (
-                        <button
-                          onClick={() => {
-                            const failed = selectedFile.commit_results
-                              .filter((item: any) => item.status !== 'success')
-                              .map((item: any) => item.chunk_id);
-                            if (failed.length > 0) {
-                              onRetryChunks(node.id, selectedFile, failed);
-                            }
-                          }}
-                          className="text-xs text-slate-600 hover:text-slate-800"
-                        >
-                          ?????
-                        </button>
-                      )}
-                    </div>
-                    <div className="space-y-2">
-                      {selectedFile.commit_results.map((item: any) => (
-                        <div key={item.chunk_id} className="border border-slate-200 rounded-lg bg-white p-3">
-                          <div className="flex items-center justify-between">
-                            <div className="text-xs text-slate-600">{item.chunk_id}</div>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${
-                                item.status === 'success' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                              }`}>
-                                {item.status === 'success' ? 'success' : 'failed'}
-                              </span>
-                              {item.deduped && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
-                                  deduped
-                                </span>
-                              )}
-                              {onRetryChunks && item.status !== 'success' && (
-                                <button
-                                  onClick={() => onRetryChunks(node.id, selectedFile, [item.chunk_id])}
-                                  className="text-[10px] text-slate-600 hover:text-slate-800"
-                                >
-                                  ??
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          {item.validation_result?.errors?.length > 0 && (
-                            <div className="mt-2 text-[10px] text-rose-600">
-                              ??: {item.validation_result.errors.join(', ')}
-                            </div>
-                          )}
-                          {item.validation_result?.warnings?.length > 0 && (
-                            <div className="mt-1 text-[10px] text-amber-600">
-                              ??: {item.validation_result.warnings.join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
                 {/* JSON Data Display */}
                 <div className="p-4">
-                  <h4 className="text-sm font-medium text-slate-700 mb-3">识别结果（JSON）</h4>
-                  
-                  <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 overflow-x-auto space-y-4">
-                    {Array.isArray(analysisResult.jsonData) && analysisResult.jsonData.length > 0 ? (
-                      (selectedFile ? (selectedJsonItem ? [selectedJsonItem] : []) : analysisResult.jsonData)
-                        .map((item: any, index: number) => {
-                          const isConfirmed = selectedFile?.confirmed || false;
-                          return (
-                          <div key={item.fileId || index} className="border border-slate-700 rounded-md p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="text-xs text-slate-400">
-                                文件 {index + 1}：{item.fileName || '未命名文件'}
-                              </div>
-                              {isConfirmed && (
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-600/20 border border-emerald-500/30 rounded text-emerald-400 text-xs font-medium">
-                                  <CheckCircle className="w-3 h-3" />
-                                  已确认
-                                </div>
-                              )}
-                            </div>
-                            <pre className="text-xs text-slate-100 font-mono whitespace-pre-wrap break-words">
-                              {item.data ? JSON.stringify(item.data, null, 2) : '暂无数据'}
-                            </pre>
-                          </div>
-                        )})
-                    ) : (
-                      <pre className="text-xs text-slate-100 font-mono whitespace-pre-wrap break-words">
-                        {analysisResult.jsonData 
-                          ? JSON.stringify(analysisResult.jsonData, null, 2)
-                          : '暂无数据'}
-                      </pre>
-                    )}
-                    {selectedFile && Array.isArray(analysisResult.jsonData) && !selectedJsonItem && (
-                      <div className="text-xs text-amber-400 mt-2">
-                        当前文件尚未解析，请先点击"开始数据分析"。
-                      </div>
-                    )}
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-slate-700">识别结果</h4>
+                    <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                        <button
+                          onClick={() => setViewMode('form')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-all ${
+                            viewMode === 'form' 
+                              ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' 
+                              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                          }`}
+                        >
+                          <LayoutList className="w-3.5 h-3.5" />
+                          表单
+                        </button>
+                        <button
+                          onClick={() => setViewMode('json')}
+                          className={`px-3 py-1 text-xs font-medium rounded-md flex items-center gap-1.5 transition-all ${
+                            viewMode === 'json' 
+                              ? 'bg-white text-blue-600 shadow-sm ring-1 ring-black/5' 
+                              : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'
+                          }`}
+                        >
+                          <Code className="w-3.5 h-3.5" />
+                          代码
+                        </button>
+                    </div>
                   </div>
+                  
+                  {viewMode === 'form' ? (
+                     <div className="space-y-4">
+                        {Array.isArray(analysisResult.jsonData) && analysisResult.jsonData.length > 0 ? (
+                           <>
+                              {(selectedFile ? (selectedJsonItem ? [selectedJsonItem] : []) : analysisResult.jsonData)
+                                .map((item: any, index: number) => (
+                                   <div key={item.fileId || index}>
+                                      {renderFormView(item.fileId || String(index), getJsonText(item.fileId || String(index), item.data))}
+                                   </div>
+                                ))}
+                           </>
+                        ) : (
+                           <div className="text-center text-slate-400 py-8 text-xs bg-slate-50 rounded-lg border border-slate-200 border-dashed">暂无结构化数据</div>
+                        )}
+                     </div>
+                  ) : (
+                    <div className="bg-white rounded-lg p-4 border border-slate-200 overflow-x-auto space-y-4 shadow-inner bg-slate-50/30">
+                        {Array.isArray(analysisResult.jsonData) && analysisResult.jsonData.length > 0 ? (
+                        <>
+                            {(selectedFile ? (selectedJsonItem ? [selectedJsonItem] : []) : analysisResult.jsonData)
+                            .map((item: any, index: number) => {
+                                const isConfirmed = selectedFile?.confirmed || false;
+                                return (
+                                <div key={item.fileId || index} className="border border-slate-200 rounded-md p-3 bg-white">
+                                    <div className="flex items-center justify-between mb-2">
+                                    <div className="text-xs text-slate-500">
+                                        文件 {index + 1}：{item.fileName || '未命名文件'}
+                                    </div>
+                                    {isConfirmed && (
+                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 border border-emerald-200 rounded text-emerald-600 text-xs font-medium">
+                                        <CheckCircle className="w-3 h-3" />
+                                        已确认
+                                        </div>
+                                    )}
+                                    </div>
+                                    <div className="space-y-2">
+                                    <textarea
+                                        value={getJsonText(item.fileId || String(index), item.data)}
+                                        onChange={(e) => handleJsonChange(item.fileId || String(index), e.target.value)}
+                                        onBlur={() => handleJsonSave(item.fileId || String(index), getJsonText(item.fileId || String(index), item.data))}
+                                        className="w-full min-h-[450px] text-[11px] leading-4 text-slate-800 font-mono whitespace-pre-wrap break-words bg-slate-50 border border-slate-200 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+                                    />
+                                    {jsonErrorsByFile[item.fileId || String(index)] && (
+                                        <div className="text-xs text-rose-500 mt-1">
+                                        {jsonErrorsByFile[item.fileId || String(index)]}
+                                        </div>
+                                    )}
+                                    </div>
+                                </div>
+                                );
+                            })}
+                             {selectedFile && Array.isArray(analysisResult.jsonData) && !selectedJsonItem && (
+                                <div className="text-xs text-amber-500 mt-2">
+                                    请运行声明式技能以处理此文件。
+                                </div>
+                            )}
+                        </>
+                        ) : (
+                           <>
+                           <pre className="text-xs text-slate-700 font-mono whitespace-pre-wrap break-words">
+                            {analysisResult.jsonData 
+                                ? JSON.stringify(analysisResult.jsonData, null, 2)
+                                : '暂无数据'}
+                            </pre>
+                            {selectedFile && (
+                                <div className="text-xs text-amber-500 mt-2">
+                                    请运行声明式技能以处理此文件。
+                                </div>
+                            )}
+                           </>
+                        )}
+                    </div>
+                  )}
 
                   {/* Action Buttons */}
                   <div className="mt-4 space-y-2">
-                    {hasMissingSelection && (
-                      <div className="text-xs text-amber-600">
-                        请先为标记为“需要选择”的片段选择模板。
-                      </div>
-                    )}
-                    <button
-                      onClick={handleConfirmClick}
-                      disabled={!selectedFile?.preview_chunks || selectedFile?.preview_chunks.length === 0 || selectedFile?.confirmed || isConfirming || hasMissingSelection}
-                      className={`w-full px-3 py-2 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2 ${
-                        selectedFile?.confirmed
-                          ? 'bg-slate-400 text-white cursor-not-allowed'
-                          : 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white'
-                      }`}
+                    <button 
+                      onClick={handleConfirmResult}
+                      disabled={isConfirming || selectedFile?.confirmed}
+                      className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white border border-transparent rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2 shadow-sm shadow-emerald-200"
                     >
-                      {isConfirming ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          确认中...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-4 h-4" />
-                          {selectedFile?.confirmed ? '已确认' : '已确认无误'}
-                        </>
-                      )}
-                    </button>
-                    <button className="w-full px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2">
-                      <Download className="w-4 h-4" />
-                      导出结果
+                      <CheckCircle className="w-4 h-4" />
+                      {selectedFile?.confirmed
+                        ? "已完成确认"
+                        : isConfirming
+                          ? "保存中..."
+                          : "已确认无误"}
                     </button>
                   </div>
                 </div>

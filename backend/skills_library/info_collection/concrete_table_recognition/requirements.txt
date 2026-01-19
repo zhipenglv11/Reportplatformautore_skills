@@ -1,0 +1,18 @@
+# 混凝土表格识别技能依赖
+
+# 千问API调用（阿里云百炼平台）
+dashscope>=1.14.0
+
+# PDF处理
+pdf2image>=1.16.3
+Pillow>=10.0.0
+
+# 环境变量管理
+python-dotenv>=1.0.0
+
+# 数据处理和输出
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# 图像处理
+opencv-python>=4.8.0

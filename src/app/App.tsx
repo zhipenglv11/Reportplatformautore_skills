@@ -9,6 +9,7 @@ import DataCollectionEditor from './components/data-collection-editor';
 import ReportEditor from './components/report-editor';
 import ReportManagement from './components/report-management';
 import ReviewPanel from './components/review-panel';
+import RawRecordReviewPanel from './components/raw-record-review-panel';
 
 // 获取项目存储的 key
 const getStorageKey = (projectId: string, type: string) => `project_${projectId}_${type}`;
@@ -233,6 +234,14 @@ export default function App() {
                       <span className="relative z-10">在线审核</span>
                       <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 scale-x-0 group-data-[state=active]:scale-x-100 transition-transform duration-200 ease-out origin-center" />
                     </TabsTrigger>
+
+                    <TabsTrigger
+                      value="raw-review"
+                      className="relative h-full px-1 bg-transparent text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-none font-medium text-sm transition-colors hover:text-slate-700 group"
+                    >
+                      <span className="relative z-10">原始记录审核</span>
+                      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 scale-x-0 group-data-[state=active]:scale-x-100 transition-transform duration-200 ease-out origin-center" />
+                    </TabsTrigger>
                   </TabsList>
                 </div>
 
@@ -266,6 +275,10 @@ export default function App() {
 
                 <TabsContent value="review" className="flex-1 m-0 p-0 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden">
                   <ReviewPanel />
+                </TabsContent>
+
+                <TabsContent value="raw-review" className="flex-1 m-0 p-0 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden">
+                  <RawRecordReviewPanel />
                 </TabsContent>
               </Tabs>
             </div>

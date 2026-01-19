@@ -103,19 +103,14 @@ export default function DataCollectionEditor({
   const [analysisResults, setAnalysisResults] = useState<Record<string, any>>(() => {
     return loadFromStorage(getStorageKey(projectId, 'collectionAnalysisResults'), {});
   });
-  const [templateSelections, setTemplateSelections] = useState<Record<string, Record<string, string>>>(() => {
-    return loadFromStorage(getStorageKey(projectId, 'collectionTemplateSelections'), {});
-  });
 
   // 当项目切换时，重新加载状态
   useEffect(() => {
     const savedFiles = loadFromStorage(getStorageKey(projectId, 'collectionUploadedFiles'), {});
     const savedResults = loadFromStorage(getStorageKey(projectId, 'collectionAnalysisResults'), {});
-    const savedSelections = loadFromStorage(getStorageKey(projectId, 'collectionTemplateSelections'), {});
     
     setUploadedFiles(savedFiles);
     setAnalysisResults(savedResults);
-    setTemplateSelections(savedSelections);
     isInitialMountRef.current = true; // 重置初始挂载标志
   }, [projectId]);
 
@@ -150,15 +145,6 @@ export default function DataCollectionEditor({
   }, [analysisResults, projectId]);
 
   // 自动保存模板选择到 localStorage（带防抖）
-  useEffect(() => {
-    if (isInitialMountRef.current) {
-      return;
-    }
-    const timer = setTimeout(() => {
-      saveToStorage(getStorageKey(projectId, 'collectionTemplateSelections'), templateSelections);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [templateSelections, projectId]);
 
   // 当父组件传入的初始数据改变时（比如切换项目），同步到本地状态
   useEffect(() => {
@@ -249,67 +235,55 @@ export default function DataCollectionEditor({
   }, [projectId]);
 
   // 处理数据分析（点击后才上传并解析）
-  const buildDefaultSelections = useCallback((chunks: any[]) => {
-    const selections: Record<string, string> = {};
-    (chunks || []).forEach((chunk: any) => {
-      if (chunk?.suggested_template_id) {
-        selections[chunk.chunk_id] = chunk.suggested_template_id;
-      }
-    });
-    return selections;
-  }, []);
 
-  const handleDataAnalysis = useCallback(async (nodeId: string, nodeData: any, customPrompt?: string, templateMap?: Record<string, string>) => {
+  const handleDataAnalysis = useCallback(async (
+    nodeId: string,
+    nodeData: any,
+    options?: { prompt?: string; skillName?: string; targetFileId?: string }
+  ) => {
     const files = uploadedFiles[nodeId] || [];
 
     if (files.length === 0) {
       return;
     }
 
-    const uploadResults = await Promise.all(files.map(async (fileItem: any) => {
-      // Allow re-analysis if templateMap is provided or if not uploaded/confirmed
-      // If templateMap is provided for this file, we force re-analysis even if status is uploaded
-      const forceReanalyze = templateMap && templateMap[fileItem.id];
-      if (!forceReanalyze && (fileItem.status === 'uploaded' || !fileItem.file)) {
-        // However, if we are in a state where we just want to update metadata but file is already uploaded...
-        // Actually, 'uploaded' here means processed by preview.
-        // If user wants to re-run preview with a template, we should allow it.
-        // Let's assume if templateMap is passed, we intend to re-analyze those files.
+    const skillName = options?.skillName;
+    if (!skillName) {
+      alert('Select a skill first.');
+      return;
+    }
+
+    const targetFiles = options?.targetFileId
+      ? files.filter((fileItem: any) => fileItem.id === options.targetFileId)
+      : files;
+
+    const uploadResults = await Promise.all(targetFiles.map(async (fileItem: any) => {
+      if (!fileItem.file) {
         return { id: fileItem.id, skipped: true };
       }
 
       const formData = new FormData();
-      if (fileItem.file) {
-        formData.append('file', fileItem.file);
-      } else {
-         // If file object is missing (maybe restored from session?), we can't re-upload.
-         // In a real app we might handle this by just sending metadata if object_key exists,
-         // but for now let's assume file object is present in memory.
-         return { id: fileItem.id, skipped: true };
-      }
-      
+      formData.append('file', fileItem.file);
+      formData.append('format', 'json');
       formData.append('project_id', projectId);
       formData.append('node_id', nodeId);
-      
-      if (templateMap && templateMap[fileItem.id]) {
-        formData.append('template_id', templateMap[fileItem.id]);
-      }
+      formData.append('persist_result', 'false');
 
       try {
-        const response = await fetch('/api/ingest/preview', {
+        const response = await fetch(`/api/skill/${encodeURIComponent(skillName)}/run`, {
           method: 'POST',
           body: formData,
         });
 
         if (!response.ok) {
-          let errorMessage = `Upload failed: ${response.statusText}`;
+          let errorMessage = `Skill failed: ${response.statusText}`;
           try {
             const errorData = await response.json();
             errorMessage = errorData.detail || errorData.message || errorMessage;
           } catch (e) {
             const text = await response.text().catch(() => '');
             if (text) {
-              errorMessage = `Upload failed: ${text.substring(0, 100)}`;
+              errorMessage = `Skill failed: ${text.substring(0, 100)}`;
             }
           }
           throw new Error(errorMessage);
@@ -318,8 +292,8 @@ export default function DataCollectionEditor({
         const result = await response.json();
         return { id: fileItem.id, result };
       } catch (error: any) {
-        console.error('Upload failed:', error);
-        const errorMessage = error?.message || error?.toString() || 'Upload failed';
+        console.error('Skill execution failed:', error);
+        const errorMessage = error?.message || error?.toString() || 'Skill execution failed';
         return { id: fileItem.id, error: errorMessage };
       }
     }));
@@ -334,17 +308,21 @@ export default function DataCollectionEditor({
       if (uploadResult.error) {
         return { ...item, status: 'failed', error: uploadResult.error };
       }
+
+      const result = uploadResult.result || {};
+      const records = Array.isArray(result.records) ? result.records : [];
+      const success = !!result.success;
+      const confirmed = records.length > 0 && records.every((entry: any) => entry.status === 'success');
+
       return {
         ...item,
-        status: 'uploaded',
-        object_key: uploadResult.result.object_key,
-        source_hash: uploadResult.result.source_hash,
-        file_type: uploadResult.result.file_type,
-        preview_chunks: uploadResult.result.chunks || [],
-        preview_run_id: uploadResult.result.run_id,
-        confirmed: false,
-        commit_results: [],
-        validation_result: null,
+        status: success ? 'uploaded' : 'failed',
+        error: success ? undefined : (result.error || 'Skill execution failed'),
+        skill_result: result,
+        commit_results: records,
+        confirmed,
+        skill_name: skillName,
+        source_hash: result.source_hash || item.source_hash,
       };
     });
 
@@ -353,31 +331,13 @@ export default function DataCollectionEditor({
       [nodeId]: nextFiles,
     }));
 
-    setTemplateSelections((prev) => {
-      const next = { ...prev };
-      nextFiles.forEach((item: any) => {
-        if (item.preview_chunks && item.preview_chunks.length > 0) {
-             // Re-build default selections based on new chunks
-             // If manual template was used (suggested_template_id), it will be in the chunk
-             next[item.id] = buildDefaultSelections(item.preview_chunks);
-        }
-      });
-      return next;
-    });
-
     const structuredData = nextFiles
       .map((item: any) => {
-        // If we have structured_data in chunks (from new backend preview), use it
-        // Otherwise use preview_chunks metadata (legacy behavior)
-        const hasExtractedData = item.preview_chunks?.some((c: any) => c.structured_data);
-        const dataDisplay = hasExtractedData 
-            ? item.preview_chunks.map((c: any) => c.structured_data).filter(Boolean)
-            : item.preview_chunks;
-            
+        const data = item.skill_result?.data;
         return {
-            fileId: item.id,
-            fileName: item.name || 'Unnamed file',
-            data: dataDisplay || [],
+          fileId: item.id,
+          fileName: item.name || 'Unnamed file',
+          data: Array.isArray(data) ? data : (data ? [data] : []),
         };
       })
       .filter((item: any) => item.data !== undefined && item.data !== null);
@@ -394,7 +354,26 @@ export default function DataCollectionEditor({
       ...prev,
       [nodeId]: analysisResult,
     }));
-  }, [uploadedFiles, projectId, buildDefaultSelections]);
+  }, [uploadedFiles, projectId]);
+
+  const handleUpdateAnalysisResult = useCallback((nodeId: string, fileId: string, data: any[]) => {
+    setAnalysisResults((prev) => {
+      const current = prev[nodeId];
+      if (!current || !Array.isArray(current.jsonData)) {
+        return prev;
+      }
+      const nextJsonData = current.jsonData.map((item: any) =>
+        item.fileId === fileId ? { ...item, data } : item
+      );
+      return {
+        ...prev,
+        [nodeId]: {
+          ...current,
+          jsonData: nextJsonData,
+        },
+      };
+    });
+  }, []);
 
   const handleRemoveFile = useCallback((nodeId: string, fileId: string) => {
     setUploadedFiles(prev => {
@@ -411,174 +390,10 @@ export default function DataCollectionEditor({
     });
   }, []);
 
-  const handleTemplateSelectionChange = useCallback((fileId: string, chunkId: string, templateId: string) => {
-    setTemplateSelections((prev) => ({
-      ...prev,
-      [fileId]: {
-        ...(prev[fileId] || {}),
-        [chunkId]: templateId,
-      },
-    }));
-  }, []);
 
-  const buildSelectionsForFile = useCallback((file: any, chunkIds?: string[]) => {
-    const chunks = file.preview_chunks || [];
-    const selectionMap = templateSelections[file.id] || buildDefaultSelections(chunks);
-    const targetChunks = chunkIds ? chunks.filter((chunk: any) => chunkIds.includes(chunk.chunk_id)) : chunks;
-    const missing: any[] = [];
-    const selections = targetChunks
-      .map((chunk: any) => {
-        const templateId = selectionMap[chunk.chunk_id] || chunk.suggested_template_id || '';
-        if (!templateId) {
-          missing.push(chunk);
-        }
-        return {
-          chunk_id: chunk.chunk_id,
-          template_id: templateId,
-        };
-      })
-      .filter((item: any) => item.template_id);
-    return { selections, missing };
-  }, [templateSelections, buildDefaultSelections]);
 
-  const submitCommit = useCallback(async (nodeId: string, file: any, chunkIds?: string[]) => {
-    if (!file.preview_chunks || file.preview_chunks.length === 0) {
-      alert('No preview chunks to commit.');
-      return;
-    }
 
-    const { selections, missing } = buildSelectionsForFile(file, chunkIds);
-    if (missing.length > 0) {
-      const missingLabels = missing.map((chunk: any) => chunk.chunk_id).join(', ');
-      alert(`Select templates for: ${missingLabels}`);
-      return;
-    }
 
-    if (selections.length === 0) {
-      alert('Select at least one template.');
-      return;
-    }
-
-    const response = await fetch('/api/ingest/commit', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        project_id: projectId,
-        node_id: nodeId,
-        object_key: file.object_key,
-        source_hash: file.source_hash,
-        filename: file.name,
-        selections,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: response.statusText }));
-      const detail = errorData.detail;
-      if (detail && typeof detail === 'object') {
-        const message = detail.message || errorData.message || response.statusText;
-        const errors = Array.isArray(detail.errors) ? detail.errors.join(', ') : '';
-        const warnings = Array.isArray(detail.warnings) ? detail.warnings.join(', ') : '';
-        const parts = [message, errors && `Errors: ${errors}`, warnings && `Warnings: ${warnings}`]
-          .filter(Boolean)
-          .join('\\n');
-        alert(`Commit failed: ${parts}`);
-      } else {
-        alert(`Commit failed: ${detail || errorData.message || response.statusText}`);
-      }
-      return;
-    }
-
-    const result = await response.json();
-    const newResults = Array.isArray(result.results) ? result.results : [];
-
-    setUploadedFiles((prev) => ({
-      ...prev,
-      [nodeId]: (prev[nodeId] || []).map((item: any) => {
-        if (item.id !== file.id) {
-          return item;
-        }
-        const existing = Array.isArray(item.commit_results) ? item.commit_results : [];
-        const mergedMap = new Map(existing.map((entry: any) => [entry.chunk_id, entry]));
-        newResults.forEach((entry: any) => {
-          mergedMap.set(entry.chunk_id, entry);
-        });
-        const mergedResults = Array.from(mergedMap.values());
-        const errors = mergedResults.flatMap((entry: any) => entry.validation_result?.errors || []);
-        const warnings = mergedResults.flatMap((entry: any) => entry.validation_result?.warnings || []);
-        const isValid = mergedResults.length > 0 && mergedResults.every((entry: any) => entry.status === 'success');
-        return {
-          ...item,
-          commit_results: mergedResults,
-          validation_result: {
-            is_valid: isValid,
-            errors,
-            warnings,
-          },
-          confirmed: isValid,
-        };
-      })
-    }));
-
-    if (newResults.length > 0) {
-      setAnalysisResults((prev) => {
-        const currentResult = prev[nodeId];
-        if (!currentResult || !Array.isArray(currentResult.jsonData)) {
-          return prev;
-        }
-
-        const nextJsonData = currentResult.jsonData.map((item: any) => {
-          if (item.fileId !== file.id) {
-            return item;
-          }
-          
-          const resultMap = new Map(newResults.map((r: any) => [r.chunk_id, r.data]));
-          const updatedData = (item.data || []).map((chunk: any) => {
-             const extracted = resultMap.get(chunk.chunk_id);
-             if (extracted) {
-                 return {
-                     chunk_id: chunk.chunk_id,
-                     ...extracted
-                 };
-             }
-             return chunk;
-          });
-          
-          return {
-            ...item,
-            data: updatedData
-          };
-        });
-
-        return {
-          ...prev,
-          [nodeId]: {
-            ...currentResult,
-            jsonData: nextJsonData,
-          },
-        };
-      });
-
-      const allSuccess = newResults.every((entry: any) => entry.status === 'success');
-      if (allSuccess) {
-        alert('Committed successfully.');
-      }
-    }
-  }, [projectId, buildSelectionsForFile]);
-
-  const handleConfirmResult = useCallback(async (nodeId: string, file: any) => {
-    if (file.confirmed) {
-      alert('Already confirmed.');
-      return;
-    }
-    await submitCommit(nodeId, file);
-  }, [submitCommit]);
-
-  const handleRetryChunks = useCallback(async (nodeId: string, file: any, chunkIds: string[]) => {
-    await submitCommit(nodeId, file, chunkIds);
-  }, [submitCommit]);
 
   const addNode = useCallback((type: string) => {
     // 为不同数据类型定义预设字段
@@ -727,18 +542,16 @@ export default function DataCollectionEditor({
 
       {/* Collection Detail Panel */}
       {selectedNode && (
-        <CollectionDetailModal 
+        <CollectionDetailModal
+          projectId={projectId} 
           node={selectedNode} 
           onClose={() => setSelectedNode(null)}
           uploadedFiles={uploadedFiles[selectedNode.id] || []}
           analysisResult={analysisResults[selectedNode.id] || null}
           onUpload={handleFileUpload}
           onAnalyze={handleDataAnalysis}
-          onConfirm={handleConfirmResult}
-          onRetryChunks={handleRetryChunks}
-          templateSelections={templateSelections}
-          onTemplateSelectionChange={handleTemplateSelectionChange}
           onRemoveFile={(fileId) => handleRemoveFile(selectedNode.id, fileId)}
+          onUpdateAnalysisResult={(fileId, data) => handleUpdateAnalysisResult(selectedNode.id, fileId, data)}
         />
       )}
     </div>

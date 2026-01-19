@@ -1,0 +1,144 @@
+﻿# -*- coding: utf-8 -*-
+"""脚本执行器：执行声明式 Skills 的脚本"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+from typing import Dict, Any, Optional
+
+
+class ScriptRunner:
+    """执行声明式 Skills 的脚本"""
+
+    def __init__(self, skill_dir: Path):
+        """
+        初始化脚本执行器
+        
+        Args:
+            skill_dir: 技能目录路径
+        """
+        self.skill_dir = skill_dir
+        self._python_executable = self._resolve_python_executable()
+
+    def _resolve_python_executable(self) -> str:
+        venv_candidates = [
+            self.skill_dir / ".venv" / "Scripts" / "python.exe",
+            self.skill_dir / "venv" / "Scripts" / "python.exe",
+            self.skill_dir / ".venv" / "bin" / "python",
+            self.skill_dir / "venv" / "bin" / "python",
+        ]
+        for candidate in venv_candidates:
+            if candidate.exists():
+                return str(candidate)
+        return sys.executable
+
+    def run_script(
+        self,
+        script_name: str = "parse.py",
+        args: Optional[list] = None,
+        input_data: Optional[Dict[str, Any]] = None,
+        env: Optional[Dict[str, str]] = None,
+        timeout: int = 300,
+    ) -> Dict[str, Any]:
+        """
+        执行脚本
+        
+        Args:
+            script_name: 脚本文件名（如 "parse.py"）
+            args: 命令行参数列表
+            input_data: 输入数据（通过 stdin 传递，JSON 格式）
+            env: 额外的环境变量
+            timeout: 超时时间（秒），默认 5 分钟
+        
+        Returns:
+            执行结果字典，包含：
+            - success: bool - 是否成功
+            - returncode: int - 返回码
+            - output: Any - 输出内容（尝试解析为 JSON）
+            - stdout: str - 标准输出
+            - stderr: str - 标准错误
+            - error: str - 错误信息（如果有）
+        """
+        script_path = self.skill_dir / script_name
+        if not script_path.exists():
+            return {
+                "success": False,
+                "error": f"Script not found: {script_path}",
+            }
+
+        # 构建命令
+        cmd = [self._python_executable, str(script_path)]
+        if args:
+            cmd.extend(args)
+
+        # 构建环境变量
+        script_env = dict(os.environ)
+        if env:
+            script_env.update(env)
+
+        # 准备输入数据
+        stdin_data = None
+        if input_data:
+            try:
+                stdin_data = json.dumps(input_data, ensure_ascii=False).encode("utf-8")
+            except (TypeError, ValueError) as e:
+                return {
+                    "success": False,
+                    "error": f"Failed to serialize input_data: {e}",
+                }
+
+        # 执行脚本
+        try:
+            process = subprocess.run(
+                cmd,
+                cwd=str(self.skill_dir),
+                input=stdin_data,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=False,  # 使用字节模式，避免编码问题
+                timeout=timeout,
+                env=script_env,
+            )
+
+            # 解码输出
+            stdout = process.stdout.decode("utf-8", errors="replace")
+            stderr = process.stderr.decode("utf-8", errors="replace")
+
+            # 尝试解析 JSON 输出
+            output = None
+            if stdout.strip():
+                try:
+                    output = json.loads(stdout)
+                except json.JSONDecodeError:
+                    # 如果不是 JSON，保留原始输出
+                    output = stdout
+
+            result = {
+                "success": process.returncode == 0,
+                "returncode": process.returncode,
+                "output": output,
+                "stdout": stdout,
+                "stderr": stderr,
+                "python": self._python_executable,
+            }
+
+            if process.returncode != 0:
+                error_message = f"Script exited with code {process.returncode}"
+                if "ModuleNotFoundError" in stderr:
+                    error_message = f"{error_message}; missing dependency (ModuleNotFoundError)"
+                result["error"] = error_message
+
+            return result
+
+        except subprocess.TimeoutExpired:
+            return {
+                "success": False,
+                "error": f"Script execution timeout ({timeout}s)",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Script execution failed: {str(e)}",
+            }

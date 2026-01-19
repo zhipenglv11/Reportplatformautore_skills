@@ -524,7 +524,7 @@ export default function ReportNodeEditor({
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                适用的原始记录
+                参考的专家知识库
               </button>
             </div>
 
@@ -535,7 +535,7 @@ export default function ReportNodeEditor({
                 type="text"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder={referenceTab === 'system' ? "搜索规范编号或名称..." : "搜索适用的原始记录..."}
+                placeholder={referenceTab === 'system' ? "搜索规范编号或名称..." : "搜索参考的专家知识库..."}
                 className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-md focus:outline-none focus:border-emerald-400 bg-white"
               />
             </div>

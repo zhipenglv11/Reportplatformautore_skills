@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     poppler_bin_path: str = ""  # Poppler bin路径（可选）
     env: str = "development"
     debug: bool = True
+    
+    # 声明式 Skills 配置
+    declarative_skills_path: str = str(PROJECT_ROOT / "backend" / "skills_library")  # 声明式 Skills 基础目录
+    enable_declarative_skills: bool = True  # 是否启用声明式 Skills
   
     class Config:
         env_file = ".env"

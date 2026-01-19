@@ -12,6 +12,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -20,9 +21,15 @@ app.add_middleware(
 # 挂载路由（统一加/api前缀）
 from api import routes
 from api import collection_routes
+from api import declarative_skill_routes
+from api import skill_orchestrator_routes
+from api import review_routes
 
 app.include_router(routes.router, prefix="/api")
 app.include_router(collection_routes.router, prefix="/api")
+app.include_router(declarative_skill_routes.router, prefix="/api")
+app.include_router(skill_orchestrator_routes.router, prefix="/api")
+app.include_router(review_routes.router, prefix="/api")
 
 @app.get("/")
 async def root():

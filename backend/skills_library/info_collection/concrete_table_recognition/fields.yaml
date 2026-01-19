@@ -1,0 +1,167 @@
+# 混凝土表格识别字段定义
+# 定义各表格类型的字段配置
+
+tables:
+  # 混凝土回弹检测记录表（结构物检测原始记录）
+  concrete_strength_sheet:
+    name: 混凝土回弹检测记录表（结构物检测原始记录）
+    code: concrete_strength_sheet
+    description: 结构混凝土强度回弹检测，施工记录回溯、AI解析报告生成
+    control_number: KJQR-056-215
+    keywords:
+      - KJQR-056-215
+      - 构件检测
+      - 现场结构检测
+      - 回弹法
+      - 构件检测原始记录
+      - 结构检测
+    
+    fields:
+      - name: 检测日期
+        type: string
+        required: true
+        description: 表格右上角「检测日期」字段，格式如：2024-10-10
+        location: 表格右上角
+        example: "2024-10-10"
+      
+      - name: 检测原因
+        type: string
+        required: true
+        description: 表格中部靠右的「检测原因」字段，如：委托检测
+        location: 表格中部靠右
+        example: "委托检测"
+      
+      - name: 检测方法
+        type: string
+        required: true
+        description: 表格中部靠右的「检测方法」字段，如：回弹法
+        location: 表格中部靠右
+        example: "回弹法"
+      
+      - name: 检测部位
+        type: string
+        required: true
+        description: 从「工程名称」或「检测部位」字段提取，如：2#楼柱梁板楼面
+        location: 工程名称或检测部位字段
+        example: "2#楼柱梁板楼面"
+      
+      - name: 混凝土品种
+        type: string
+        required: true
+        description: 表格右上方的「混凝土品种」字段，如：泵送混凝土
+        location: 表格右上方
+        example: "泵送混凝土"
+      
+      - name: 强度等级
+        type: string
+        required: true
+        description: 表格右下区域每行「强度等级」字段，统一提取为主等级，如：C30
+        location: 表格右下区域每行
+        example: "C30"
+        extraction_rule: "从每行强度等级字段中提取，统一提取为主等级"
+      
+      - name: 施工日期列表
+        type: array
+        items_type: string
+        required: true
+        description: 所有明细行中的「施工日期」去重后组成的数组，如：["2021"]
+        location: 明细行中的施工日期字段
+        example: ["2021"]
+        extraction_rule: "提取所有明细行中的施工日期，去重后组成字符串数组"
+  
+  # 混凝土强度检测表格（KSQR-4.13-XC-10）
+  concrete_strength_grid:
+    name: 回弹法检测混凝土强度原始记录（KSQR-4.13-XC-10）
+    code: concrete_strength_grid
+    description: 用于结构实体混凝土强度回弹检测的原始数据采集
+    control_number: KSQR-4.13-XC-10
+    keywords:
+      - KSQR-4.13-XC-10
+      - 推定值
+      - 平均值
+      - 标准差
+      - JGJ/T 23-2011
+    
+    fields:
+      - name: 控制标号
+        type: string
+        required: true
+        description: 表格左上角控制编号，用于表格类型判断，如：KSQR-4.13-XC-10
+        location: 表格左上角
+        example: "KSQR-4.13-XC-10"
+        extraction_rule: "优先识别字段，位于表格左上角"
+      
+      - name: 设计强度等级
+        type: string
+        required: true
+        description: 混凝土设计强度等级，如：C30
+        location: 表格中
+        example: "C30"
+      
+      - name: 检测部位
+        type: string
+        required: true
+        description: 混凝土构件位置描述，如：一层柱3/1/B
+        location: 表格中
+        example: "一层柱3/1/B"
+      
+      - name: 混凝土品种
+        type: string
+        required: true
+        description: 混凝土类型，如：泵送混凝土
+        location: 表格中
+        example: "泵送混凝土"
+      
+      - name: 检测日期
+        type: string
+        required: true
+        description: 表格右上区域，如：2024-10-14
+        location: 表格右上区域
+        example: "2024-10-14"
+      
+      - name: 施工日期
+        type: string
+        required: true
+        description: 表格右上区域，如：2021-01-01
+        location: 表格右上区域
+        example: "2021-01-01"
+      
+      - name: 碳化深度（mm）
+        type: number
+        required: true
+        description: 表格中「碳化深度」列的「计算」值，数值类型，如：6.00
+        location: 表格中「碳化深度(mm)」列的「计算」值
+        example: 6.00
+        extraction_rule: "提取计算列的值（不是测值），数值类型，单位为mm"
+      
+      - name: 测区强度最小值（MPa）
+        type: number
+        required: true
+        description: 表格底部字段，数值类型，如：33.7
+        location: 表格底部字段
+        example: 33.7
+        extraction_rule: "数值类型，不要带单位"
+      
+      - name: 测区强度平均值（MPa）
+        type: number
+        required: true
+        description: 表格底部字段，数值类型，如：35.7
+        location: 表格底部字段
+        example: 35.7
+        extraction_rule: "数值类型，不要带单位"
+      
+      - name: 测区强度标准差（MPa）
+        type: number
+        required: true
+        description: 表格底部字段，数值类型，如：1.19
+        location: 表格底部字段
+        example: 1.19
+        extraction_rule: "数值类型，不要带单位"
+      
+      - name: 混凝土强度推定值（MPa）
+        type: number
+        required: true
+        description: 最终计算结果，数值类型，如：33.7
+        location: 表格底部字段
+        example: 33.7
+        extraction_rule: "数值类型，不要带单位"

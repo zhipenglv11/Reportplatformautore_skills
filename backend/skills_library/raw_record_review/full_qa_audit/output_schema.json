@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Output schema for the Full QA Audit Pipeline",
+  "properties": {
+    "pipeline_id": {
+      "type": "string",
+      "description": "Unique identifier for this audit run"
+    },
+    "overall_pipeline_conclusion": {
+      "type": "string",
+      "enum": ["PASS", "CONDITIONAL_PASS", "FAIL", "TERMINATED_EARLY"],
+      "description": "The final verdict of the entire QA process."
+    },
+    "summary_statement": {
+      "type": "string",
+      "description": "Executive summary of the findings."
+    },
+    "step_1_raw_record_audit": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["skipped", "pass", "warning", "fail"] },
+        "critical_issues": { "type": "array", "items": { "type": "string" } },
+        "summary": { "type": "string" }
+      }
+    },
+    "step_2_consistency_check": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["skipped", "pass", "conditional_pass", "fail"] },
+        "mismatches": { "type": "array", "items": { "type": "string" } },
+        "summary": { "type": "string" }
+      }
+    },
+    "step_3_report_audit": {
+      "type": "object",
+      "properties": {
+        "status": { "type": "string", "enum": ["skipped", "pass", "needs_revision", "fail"] },
+        "issues_found": { "type": "array", "items": { "type": "string" } },
+        "summary": { "type": "string" }
+      }
+    }
+  },
+  "required": ["overall_pipeline_conclusion", "step_1_raw_record_audit", "step_2_consistency_check", "step_3_report_audit"]
+}

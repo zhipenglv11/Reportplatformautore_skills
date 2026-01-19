@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "description": "Output schema for Raw Record vs Report Consistency Check",
+  "properties": {
+    "overall_status": {
+      "type": "string",
+      "enum": ["pass", "fail", "needs_review"],
+      "description": "The aggregated result of all consistency checks."
+    },
+    "project_match_summary": {
+      "type": "object",
+      "properties": {
+        "date_check": {
+          "type": "string",
+          "enum": ["pass", "fail", "conditional_pass", "needs_review"]
+        },
+        "instrument_id_check": {
+          "type": "string",
+          "enum": ["pass", "fail", "needs_review"]
+        },
+        "record_id_check": {
+          "type": "string",
+          "enum": ["pass", "fail", "needs_review"]
+        }
+      },
+      "required": ["date_check", "instrument_id_check", "record_id_check"]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rule_id": {
+            "type": "string",
+            "description": "Reference to the rule definition (e.g., R1-date)"
+          },
+          "item": {
+            "type": "string",
+            "description": "The specific data item being checked (e.g., inspection_date)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pass", "conditional_pass", "fail", "needs_review"]
+          },
+          "difference_highlight": {
+             "type": "string", 
+             "description": "Short description of the diff if any"
+          },
+          "raw_record": {
+            "type": "object",
+            "properties": {
+              "value": { "type": ["string", "number", "null"] },
+              "location": {
+                "type": "object",
+                "properties": {
+                  "page": { "type": "integer" },
+                  "region": { "type": "string" },
+                  "file_name": { "type": "string" }
+                }
+              }
+            }
+          },
+          "report": {
+            "type": "object",
+            "properties": {
+              "value": { "type": ["string", "number", "null"] },
+              "location": {
+                "type": "object",
+                "properties": {
+                  "page": { "type": "integer" },
+                  "section": { "type": "string" }
+                }
+              }
+            }
+          },
+          "reason": {
+            "type": "string",
+            "description": "Explanation for the assigned status"
+          },
+          "fix_suggestion": {
+            "type": "string",
+            "description": "Optional suggestion for resolving the issue"
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["minor", "major", "critical"]
+          }
+        },
+        "required": ["rule_id", "status", "severity"]
+      }
+    },
+    "summary": {
+      "type": "string",
+      "description": "Human-readable summary of the consistency check results."
+    }
+  },
+  "required": ["overall_status", "project_match_summary", "checks", "summary"]
+}
