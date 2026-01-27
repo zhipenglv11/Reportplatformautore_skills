@@ -260,7 +260,7 @@ class ChapterGenerationSkill:
     def _resolve_dataset(self, dataset_key: str) -> Dict[str, Any]:
         if dataset_key == "concrete_rebound_tests":
             return {
-                "test_items": ["混凝土抗压强度", "混凝土强度"],
+                "test_items": ["混凝土抗压强度", "混凝土强度", "混凝土强度检测表格", "concrete_table_recognition"],
                 "method_keyword": "回弹",
                 "table_id": "table_7_rebound",
                 "title": "表7 回弹法检测结果汇总",
@@ -282,6 +282,19 @@ class ChapterGenerationSkill:
         if dataset_key == "concrete_strength_description":
             return {
                 "output_type": "text",
+                "table_ref": "表7",
+            }
+        if dataset_key == "concrete_strength_comprehensive":
+            return {
+                "test_items": ["混凝土抗压强度", "混凝土强度", "混凝土强度检测表格", "concrete_table_recognition"],
+                "method_keyword": "回弹",
+                "table_id": "table_7_rebound",
+                "title": "表7 回弹法检测混凝土抗压强度推定值",
+                "columns": self.TABLE7_COLUMNS,
+                "strength_digits": 1,
+                "carbonation_digits": 0,
+                "allow_empty_method": True,
+                "output_format": "text_and_table",
                 "table_ref": "表7",
             }
         raise ValueError(f"Unsupported dataset_key: {dataset_key}")
@@ -735,6 +748,303 @@ class ChapterGenerationSkill:
             "evidence_refs": self._dedupe_evidence(evidence_refs),
         }
 
+    def _process_concrete_strength_data(
+        self,
+        records: List[Dict[str, Any]],
+        dataset: Dict[str, Any],
+        chapter_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """统一处理混凝土强度数据，同时生成表格和文本所需数据"""
+        use_confirmed_result = bool(chapter_config.get("use_confirmed_result", True))
+        rule_id = self._resolve_rule_id(chapter_config.get("rule_id"))
+        rule_config = self._load_rule(rule_id)
+        allow_empty_method = bool(dataset.get("allow_empty_method", False))
+        CARBONATION_THRESHOLD = 6
+
+        # 用于文本描述的数据收集
+        concrete_types: List[str] = []
+        methods: List[str] = []
+        instruments: List[str] = []
+        design_grades_text: List[str] = []
+        strengths_text: List[float] = []
+        carbonation_values: List[float] = []
+        test_dates: List[date] = []
+        casting_dates: List[date] = []
+        correction_standards: List[str] = []
+        correction_factors: List[float] = []
+        evaluation_texts: List[str] = []
+
+        # 用于表格的数据
+        table_rows: List[Dict[str, Any]] = []
+        table_strengths: List[float] = []
+        table_design_grades: List[str] = []
+        
+        evidence_refs: List[Dict[str, Any]] = []
+
+        # 更灵活的 test_item 匹配：支持精确匹配或包含匹配
+        def matches_test_items(test_item: str) -> bool:
+            if not test_item:
+                return False
+            test_item_lower = test_item.lower()
+            # 精确匹配
+            for item in dataset.get("test_items", []):
+                if test_item_lower == item.lower():
+                    return True
+            # 包含匹配（如果 test_item 包含任何 dataset 定义的关键词）
+            for item in dataset.get("test_items", []):
+                if item.lower() in test_item_lower or test_item_lower in item.lower():
+                    return True
+            return False
+
+        for record in records:
+            if not matches_test_items(record.get("test_item")):
+                continue
+
+            raw_result = self._ensure_dict(record.get("raw_result"))
+            test_value_json = self._ensure_dict(record.get("test_value_json"))
+            confirmed_result = (
+                self._ensure_dict(record.get("confirmed_result")) if use_confirmed_result else {}
+            )
+
+            method = self._normalize_method(
+                self._extract_method(test_value_json, raw_result)
+            )
+            if not method and not allow_empty_method:
+                continue
+            if method and dataset["method_keyword"] not in method:
+                continue
+
+            # 提取数据
+            location = record.get("location")
+            design_grade = (
+                record.get("design_strength_grade")
+                or test_value_json.get("design_grade")
+                or raw_result.get("design_grade")
+                or raw_result.get("设计强度等级")
+                or record.get("component_type")
+            )
+            strength = (
+                self._as_number(record.get("strength_estimated_mpa"))
+                or self._as_number(raw_result.get("strength_estimated_mpa"))
+                or self._as_number(raw_result.get("混凝土强度推定值_MPa"))
+                or self._as_number(record.get("test_result"))
+            )
+            carbonation = (
+                self._as_number(record.get("carbonation_depth_avg_mm"))
+                or self._as_number(raw_result.get("carbonation_depth_avg_mm"))
+                or self._as_number(raw_result.get("碳化深度平均值_mm"))
+                or self._as_number(raw_result.get("碳化深度平均值"))
+            )
+            evaluation = raw_result.get("evaluation") or raw_result.get("抽测结果评价")
+            if not evaluation:
+                evaluation = self._apply_rule_evaluation(strength, design_grade, rule_config)
+            if not evaluation:
+                evaluation = self._compute_evaluation(strength, design_grade)
+
+            # 收集用于表格的数据
+            if strength is not None:
+                table_strengths.append(strength)
+            if design_grade:
+                table_design_grades.append(str(design_grade))
+
+            table_rows.append({
+                "position": record.get("test_location_text") or self._build_location_display(location),
+                "design_grade": design_grade,
+                "strength_estimated_mpa": strength,
+                "carbonation_depth_avg_mm": carbonation,
+                "evaluation": evaluation,
+            })
+
+            # 收集用于文本描述的数据
+            concrete_type = (
+                confirmed_result.get("concrete_type")
+                or raw_result.get("concrete_type")
+                or raw_result.get("混凝土类型")
+            )
+            if concrete_type:
+                concrete_types.append(str(concrete_type))
+
+            if method:
+                methods.append(method)
+
+            instrument = (
+                confirmed_result.get("test_instrument")
+                or raw_result.get("test_instrument")
+                or raw_result.get("检测仪器")
+            )
+            if instrument:
+                instruments.append(str(instrument))
+
+            if design_grade:
+                design_grades_text.append(str(design_grade))
+            
+            if strength is not None:
+                strengths_text.append(strength)
+
+            if carbonation is not None:
+                carbonation_values.append(carbonation)
+
+            test_date = self._parse_date_value(record.get("test_date") or raw_result.get("test_date"))
+            if test_date:
+                test_dates.append(test_date)
+
+            casting_date = self._parse_date_value(
+                record.get("casting_date") or raw_result.get("construction_date")
+            )
+            if casting_date:
+                casting_dates.append(casting_date)
+
+            correction_standard = raw_result.get("correction_standard")
+            if correction_standard:
+                correction_standards.append(str(correction_standard))
+
+            correction_factor = self._as_number(raw_result.get("strength_correction_factor"))
+            if correction_factor is not None:
+                correction_factors.append(correction_factor)
+
+            if evaluation:
+                evaluation_texts.append(str(evaluation))
+
+            # 证据引用
+            object_key = record.get("object_key")
+            if object_key:
+                evidence_refs.append({
+                    "type": "upload",
+                    "object_key": object_key,
+                })
+
+        # 计算统计信息
+        common_concrete_type = self._most_common_text(concrete_types)
+        common_method = self._most_common_text(methods)
+        common_instrument = self._most_common_text(instruments)
+        common_design_grade = self._most_common_text(table_design_grades) or self._most_common_text(design_grades_text)
+
+        strength_source = table_strengths if table_strengths else strengths_text
+        strength_min = round(min(strength_source), 1) if strength_source else None
+        strength_avg = round(sum(strength_source) / len(strength_source), 1) if strength_source else None
+        strength_count = len(strength_source)
+        carbonation_avg = round(sum(carbonation_values) / len(carbonation_values), 1) if carbonation_values else None
+
+        age_days_value = None
+        if test_dates and casting_dates:
+            test_date = min(test_dates)
+            casting_date = min(casting_dates)
+            delta_days = (test_date - casting_date).days
+            if delta_days >= 0:
+                age_days_value = delta_days
+
+        correction_standard = self._most_common_text(correction_standards) or chapter_config.get("ruleset")
+        correction_factor = None
+        if correction_factors:
+            correction_factor = round(sum(correction_factors) / len(correction_factors), 2)
+        evaluation_text = self._most_common_text(evaluation_texts)
+
+        test_date_for_fact = min(test_dates) if test_dates else None
+        casting_date_for_fact = min(casting_dates) if casting_dates else None
+
+        # 生成事实字典
+        facts: Dict[str, Any] = {
+            "concrete_type": common_concrete_type,
+            "test_method": common_method,
+            "test_instrument": common_instrument,
+            "design_strength_grade": common_design_grade,
+            "strength_min_mpa": strength_min,
+            "strength_avg_mpa": strength_avg,
+            "strength_count": strength_count,
+            "carbonation_depth_avg_mm": carbonation_avg,
+            "test_date": self._normalize_date_text(test_date_for_fact) if test_date_for_fact else None,
+            "casting_date": self._normalize_date_text(casting_date_for_fact) if casting_date_for_fact else None,
+            "age_days": age_days_value,
+            "correction_standard": correction_standard,
+            "strength_correction_factor": correction_factor,
+            "evaluation": evaluation_text,
+            "sample_scope": chapter_config.get("sample_scope") or "混凝土构件",
+            "age_days_over_1000": age_days_value is not None and age_days_value > 1000,
+            "carbonation_depth_over_6": carbonation_avg is not None and carbonation_avg >= CARBONATION_THRESHOLD,
+        }
+
+        # 生成描述文本
+        table_ref = dataset.get("table_ref", "表7")
+        description_text = self._build_strength_description_text(facts, table_ref)
+
+        return {
+            "facts": facts,
+            "description_text": description_text,
+            "table_rows": table_rows,
+            "evidence_refs": evidence_refs,
+        }
+
+    def _generate_concrete_strength_comprehensive(
+        self,
+        project_id: str,
+        node_id: Optional[str],
+        dataset: Dict[str, Any],
+        chapter_config: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """生成混凝土强度完整报告（文本 + 表格）"""
+        # 获取数据
+        records = fetch_professional_data(
+            project_id=project_id,
+            node_id=node_id,
+            test_item=None,
+        )
+
+        # 调试：打印获取的数据
+        import sys
+        print(f"[DEBUG] Total records fetched: {len(records)}", file=sys.stderr)
+        if records:
+            print(f"[DEBUG] Sample record test_item: {records[0].get('test_item')}", file=sys.stderr)
+            print(f"[DEBUG] Dataset test_items: {dataset.get('test_items')}", file=sys.stderr)
+
+        # 统一处理数据
+        processed_data = self._process_concrete_strength_data(records, dataset, chapter_config)
+
+        # 调试：检查处理结果
+        print(f"[DEBUG] Processed data rows: {len(processed_data.get('table_rows', []))}", file=sys.stderr)
+        print(f"[DEBUG] Description text length: {len(processed_data.get('description_text', ''))}", file=sys.stderr)
+
+        # 如果没有数据，返回空报告但不失败
+        if not processed_data["table_rows"] and not processed_data["description_text"]:
+            return {
+                "blocks": [
+                    {
+                        "type": "text",
+                        "text": "未找到符合条件的混凝土强度检测数据。",
+                        "facts": {},
+                    }
+                ],
+                "summary": {},
+                "evidence_refs": [],
+            }
+
+        # 构建文本块
+        text_block = {
+            "type": "text",
+            "text": processed_data["description_text"],
+            "facts": processed_data["facts"],
+        }
+
+        # 构建表格块
+        table_rows_with_index = [
+            {"index": str(i + 1), **row}
+            for i, row in enumerate(processed_data["table_rows"])
+        ]
+        
+        table_block = {
+            "type": "table",
+            "title": dataset.get("title", "表7 回弹法检测混凝土抗压强度推定值"),
+            "columns": dataset["columns"],
+            "rows": table_rows_with_index,
+        }
+
+        blocks = [text_block, table_block]
+
+        return {
+            "blocks": blocks,
+            "summary": processed_data["facts"],
+            "evidence_refs": self._dedupe_evidence(processed_data["evidence_refs"]),
+        }
+
     def execute(self, project_id: str, chapter_config: Dict[str, Any]) -> ChapterResult:
         node_id = chapter_config.get("node_id") or chapter_config.get("chapter_id") or "chapter"
         title = chapter_config.get("title") or chapter_config.get("label") or "章节"
@@ -759,6 +1069,19 @@ class ChapterGenerationSkill:
 
         if dataset_key == "concrete_strength_description":
             result = self._generate_strength_description(project_id, query_node_id, dataset, chapter_config)
+            return ChapterResult(
+                chapter_id=node_id,
+                title=title,
+                template_style=template_style,
+                reference_spec_type=reference_spec_type,
+                reference_spec=reference_spec,
+                blocks=result["blocks"],
+                summary=result["summary"],
+                evidence_refs=result["evidence_refs"],
+            )
+
+        if dataset_key == "concrete_strength_comprehensive":
+            result = self._generate_concrete_strength_comprehensive(project_id, query_node_id, dataset, chapter_config)
             return ChapterResult(
                 chapter_id=node_id,
                 title=title,

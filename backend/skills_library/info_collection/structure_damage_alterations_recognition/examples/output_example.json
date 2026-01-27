@@ -1,0 +1,34 @@
+{
+  "meta": {
+    "control_id": "KJQR-056-2048",
+    "record_no": "No:2500114",
+    "instrument_id": "CLG04-14",
+    "test_date": "2025-02-06",
+    "house_name": "XX住宅楼"
+  },
+  "items": [
+    {
+      "modification_location": "101室",
+      "modification_description": "拆除原有砖墙，长度3.5m，高度2.8m，厚度240mm，拆除面积约9.8㎡，需做好支撑",
+      "photo_no": "照片6"
+    },
+    {
+      "modification_location": "102室",
+      "modification_description": "新增钢筋混凝土梁，截面尺寸200mm×400mm，长度4.2m，配筋4φ20，箍筋φ8@150",
+      "photo_no": "照片7"
+    },
+    {
+      "modification_location": "一层走廊",
+      "modification_description": "加固原有柱子，采用粘钢加固，钢板厚度6mm，粘贴面积1.2㎡，使用环氧树脂胶",
+      "photo_no": null
+    }
+  ],
+  "signoff": {
+    "inspector": "张三",
+    "recorder": "李四",
+    "reviewer": "王五"
+  },
+  "source_file": "example.jpg",
+  "status": "success",
+  "notes": "所有字段均成功识别"
+}

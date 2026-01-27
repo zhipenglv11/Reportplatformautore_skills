@@ -1,0 +1,23 @@
+{
+  "name": "structure_damage_alterations_extractor",
+  "displayName": "结构损伤及拆改检查数据抽取",
+  "description": "从结构损伤及拆改检查原始记录中提取相关字段信息,支持 PDF 和图片格式",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "tags": ["data-extraction", "ocr", "structure-inspection", "damage-assessment", "alteration-check"],
+  "main": "parse.py",
+  "requirements": "requirements.txt",
+  "input": {
+    "type": "file",
+    "acceptedFormats": ["pdf", "png", "jpg", "jpeg"]
+  },
+  "output": {
+    "type": "structured",
+    "format": "json"
+  },
+  "environment": {
+    "python": ">=3.8",
+    "requiresEnv": true,
+    "envFile": ".env"
+  }
+}

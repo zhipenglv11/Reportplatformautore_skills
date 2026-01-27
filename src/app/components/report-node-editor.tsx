@@ -116,6 +116,26 @@ output_policy:
 
 // 抓取规则定义
 const EXTRACTION_RULES: Record<string, { title: string; fields: string[] }> = {
+  'concrete_strength_full': {
+    title: '混凝土强度检测（完整报告）',
+    fields: [
+      '【文本描述包含】',
+      '混凝土类型',
+      '检测方法',
+      '检测仪器',
+      '强度统计（最小值/平均值/数量）',
+      '碳化深度平均值',
+      '龄期、修正系数',
+      '评价结果',
+      '',
+      '【表格包含】',
+      '检测部位',
+      '设计强度等级',
+      '混凝土强度推定值_MPa',
+      '碳化深度平均值_mm',
+      '抽测结果评价'
+    ]
+  },
   'concrete_strength_table': {
     title: '表7 回弹法检测结果抓取规则',
     fields: [
@@ -164,8 +184,10 @@ export default function ReportNodeEditor({
     const scopePrefix = sourceNodeId.startsWith('scope_') ? sourceNodeId : '';
     
     const allOptions = [
-      { value: 'concrete_strength_table', label: '混凝土强度表格', category: 'scope_concrete_strength' },
-      { value: 'concrete_strength_desc', label: '混凝土强度描述', category: 'scope_concrete_strength' },
+      { value: 'concrete_strength_full', label: '混凝土强度检测', category: 'scope_concrete_strength' },
+      // 保留旧选项用于向后兼容
+      { value: 'concrete_strength_table', label: '混凝土强度表格（旧）', category: 'scope_concrete_strength', deprecated: true },
+      { value: 'concrete_strength_desc', label: '混凝土强度描述（旧）', category: 'scope_concrete_strength', deprecated: true },
       { value: 'mortar_strength_data', label: '砂浆强度数据', category: 'scope_mortar_strength' },
       { value: 'mortar_strength_desc', label: '砂浆强度描述', category: 'scope_mortar_strength' },
       { value: 'brick_strength_table', label: '砖强度表格', category: 'scope_brick_strength' },

@@ -459,6 +459,14 @@ export default function DataCollectionEditor({
             { name: 'issues_found', label: '发现的问题', type: 'text', required: false },
             { name: 'weather', label: '天气情况', type: 'text', required: false },
           ];
+        case 'multi-doc-upload':
+          return [
+            { name: 'batch_name', label: '批次名称', type: 'text', required: true },
+            { name: 'upload_time', label: '上传时间', type: 'date', required: true },
+            { name: 'doc_count', label: '文档数量', type: 'number', required: false },
+            { name: 'status', label: '处理状态', type: 'text', required: false },
+            { name: 'notes', label: '备注信息', type: 'text', required: false },
+          ];
         default:
           return [];
       }
@@ -474,6 +482,7 @@ export default function DataCollectionEditor({
         'material-test': '材料检测',
         'site-inspection': '现场情况检查',
         'delegate-info': '委托方资料',
+        'multi-doc-upload': '多文档智能上传',
       };
       return labels[dataType] || '数据节点';
     };

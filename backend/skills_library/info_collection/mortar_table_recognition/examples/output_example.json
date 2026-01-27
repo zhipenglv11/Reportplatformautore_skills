@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "table_id": "KJQR-056-206",
+    "record_no": "2500108",
+    "test_date": "2023-02-26",
+    "instrument_model": "SJY-800B"
+  },
+  "rows": [
+    {
+      "seq": 1,
+      "test_location": "一层墙 19×D-F 轴",
+      "converted_strength_mpa": 2.0,
+      "estimated_strength_mpa": 1.8
+    },
+    {
+      "seq": 2,
+      "test_location": "二层墙 20×D-F 轴",
+      "converted_strength_mpa": 2.2,
+      "estimated_strength_mpa": 2.0
+    },
+    {
+      "seq": 3,
+      "test_location": "三层墙 21×D-F 轴",
+      "converted_strength_mpa": null,
+      "estimated_strength_mpa": null
+    }
+  ],
+  "notes": "第3行数据因破损无法读取强度值",
+  "source_file": "example_report.pdf",
+  "extraction_timestamp": "2026-01-25T10:00:00",
+  "confidence_score": 0.95,
+  "status": "success"
+}

@@ -1,0 +1,225 @@
+# Structure Damage and Alterations Inspection Fields
+# 结构损伤及拆改检查原始记录字段定义
+
+# 表头字段(meta)
+meta_fields:
+  - name: control_id
+    chinese_name: 控制编号
+    type: string
+    required: true
+    location: 左上角或指定位置
+    description: 表格的控制编号/ID
+    example: KJQR-056-2048
+    notes: 通常位于表格左上角
+
+  - name: record_no
+    chinese_name: 原始记录编号
+    type: string
+    required: true
+    location: 右上角 No:xxxxx
+    description: 原始记录编号,格式为No:xxxxx
+    example: "No:2500114"
+    notes: 保留完整格式，包括"No:"
+
+  - name: instrument_id
+    chinese_name: 仪器编号
+    type: string
+    required: false
+    description: 检测使用的仪器编号
+    example: "CLG04-14"
+    notes: 根据实际情况提取
+
+  - name: test_date
+    chinese_name: 检测日期
+    type: date
+    required: false
+    description: 进行检测的日期
+    example: "2025-02-06"
+    format: YYYY-MM-DD(无法规范化则保留原字符串)
+    notes: 禁止推断补全,无法识别则返回null
+
+  - name: house_name
+    chinese_name: 房屋名称
+    type: string
+    required: false
+    description: 房屋或建筑名称
+    example: "XX住宅楼"
+    notes: 根据实际情况提取
+
+# 表格数据行字段(items) - 每一行一个对象(逐行抽取,不要合并)
+items_fields:
+  - name: modification_location
+    chinese_name: 拆改部位
+    type: string
+    required: true
+    column_position: 第一列
+    description: 完整提取该列的所有文字内容
+    example: "101室"
+    normalization: 去首尾空格、压缩连续空格为1个
+    notes: |
+      保持原文,不改写
+      完整提取该列单元格内的所有文字
+
+  - name: modification_description
+    chinese_name: 拆改内容描述
+    type: string
+    required: true
+    column_position: 第二列
+    description: 完整提取该列的所有文字内容(整段原文,不改写)
+    example: "拆除原有砖墙,长度3.5m,高度2.8m,厚度240mm,拆除面积约9.8㎡"
+    normalization: 去首尾空格、压缩连续空格为1个
+    notes: |
+      【最重要】整段原文完整抄出,不改写
+      不要对内容进行二次解析
+      不要提取类型、尺寸等子字段
+      保持原文的所有内容
+
+  - name: photo_no
+    chinese_name: 照片编号
+    type: string
+    required: false
+    column_position: 第三列或备注列
+    description: 照片编号
+    example: "照片6"
+    normalization: 去首尾空格
+    notes: 如果表格中有照片编号列则提取,否则为null
+
+  # 以下字段已废弃,不再提取
+  - name: alteration_type
+    chinese_name: 拆改类型
+    type: string
+    required: false
+    description: 拆改的类型,如拆除、新增、改造等
+    example: "拆除"
+    allowed_values: ["拆除", "新增", "改造", "加固", "其他"]
+    notes: 可能需要从描述中提取
+
+  - name: damage_description
+    chinese_name: 损伤描述
+    type: string
+    required: false
+    description: 结构损伤的详细描述
+    example: "发现裂缝,长度约1.2m,宽度0.5mm"
+    normalization: 去首尾空格、压缩连续空格为1个
+
+  - name: damage_type
+    chinese_name: 损伤类型
+    type: string
+    required: false
+    description: 损伤的类型
+    example: "裂缝"
+    allowed_values: ["裂缝", "剥落", "锈蚀", "变形", "渗漏", "其他"]
+
+  - name: damage_level
+    chinese_name: 损伤程度
+    type: string
+    required: false
+    description: 损伤的严重程度
+    example: "轻微"
+    allowed_values: ["轻微", "中等", "严重"]
+
+  - name: dimension_length
+    chinese_name: 长度尺寸
+    type: string
+    required: false
+    description: 拆改或损伤的长度尺寸
+    example: "3.5m"
+    unit: m/mm
+    notes: 保留单位和数值
+
+  - name: dimension_width
+    chinese_name: 宽度尺寸
+    type: string
+    required: false
+    description: 拆改或损伤的宽度尺寸
+    example: "2.8m"
+    unit: m/mm
+
+  - name: dimension_height
+    chinese_name: 高度尺寸
+    type: string
+    required: false
+    description: 拆改或损伤的高度尺寸
+    example: "2.8m"
+    unit: m/mm
+
+  - name: remarks
+    chinese_name: 备注
+    type: string
+    required: false
+    description: 其他补充说明信息
+    example: "需加固处理"
+    normalization: 去首尾空格、压缩连续空格为1个
+    notes: 已废弃,不再使用
+
+# 签名字段(signoff)
+signoff_fields:
+  - name: inspector
+    chinese_name: 检查人
+    type: string
+    required: false
+    description: 执行检查的人员姓名
+    example: "张三"
+
+  - name: recorder
+    chinese_name: 记录人
+    type: string
+    required: false
+    description: 记录检查结果的人员姓名
+    example: "李四"
+
+  - name: reviewer
+    chinese_name: 审核人
+    type: string
+    required: false
+    description: 审核检查结果的人员姓名
+    example: "王五"
+
+# 数据格式规范
+format_rules:
+  date:
+    - 优先输出 YYYY-MM-DD 格式
+    - 若无法可靠规范化(手写模糊/缺日/月),则保留原字符串
+    - 禁止推断补全
+
+  number:
+    - 类型:number | null
+    - 若为空、为"—"/"/"等占位符:输出 null
+    - 若为数值,保留原始精度
+
+  integer:
+    - 类型:integer | null
+    - 能识别就输出;识别不到允许 null
+    - 不允许自动补号/重排
+
+  string:
+    - 类型:string | null
+    - 轻量清洗:去首尾空格、把连续空格压成1个
+    - 不改写语义,保持原文描述
+
+# 提取优先级
+extraction_priority:
+  high:
+    - control_id
+    - record_no
+    - modification_location
+    - modification_description
+  medium:
+    - instrument_id
+    - test_date
+    - house_name
+    - photo_no
+  low:
+    - inspector
+    - recorder
+    - reviewer
+
+# 特殊说明
+notes:
+  - 【核心原则】完整提取,不做二次解析
+  - modification_location: 完整提取该列的所有文字内容
+  - modification_description: 整段原文完整抄出,不改写,不提取子字段
+  - 每一行一个对象(逐行抽取,不要合并)
+  - 不要对内容进行类型、尺寸等二次解析
+  - 保持原文的所有标点、数字、单位
+  - 如遇不确定信息,在notes字段中说明

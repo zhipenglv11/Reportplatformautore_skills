@@ -1,0 +1,72 @@
+﻿# 砖强度（回弹法）表格字段定义
+# 定义表格类型与字段配置
+
+tables:
+  brick_strength_rebound_raw:
+    name: 砖强度（回弹法）原始记录表
+    code: brick_strength_rebound_raw
+    description: 用于砖强度回弹法检测的原始记录表，抽取表头与行级检测数据
+    control_number: KJQR-056-223
+    keywords:
+      - KJQR-056-223
+      - 砖强度
+      - 回弹法
+      - 原始记录表
+      - 检测日期
+      - 仪器编号
+      - 砖的种类
+      - 强度等级
+      - 强度推定值
+
+    fields:
+      - name: table_id
+        type: string
+        required: false
+        description: 表格控制编号（左上角），用于类型识别与去重
+        location: 表格左上角
+        example: "KJQR-056-223"
+
+      - name: test_date
+        type: string
+        required: false
+        description: 检测日期（完整清晰时规范化为 YYYY-MM-DD，不完整则保留原样）
+        location: 表头“检测日期”
+        example: "2023-02-26"
+        extraction_rule: "完整清晰则 YYYY-MM-DD，不推断、不补全"
+
+      - name: instrument_id
+        type: string
+        required: false
+        description: 仪器编号
+        location: 表头“仪器编号”
+        example: "BTPL-***"
+
+      - name: brick_type
+        type: string
+        required: false
+        description: 砖的种类
+        location: 表头“砖的种类”
+        example: "烧结砖"
+
+      - name: strength_grade
+        type: string
+        required: false
+        description: 强度等级
+        location: 表头“强度等级”
+        example: "MU15"
+
+      - name: rows[].test_location
+        type: string
+        required: false
+        description: 检测部位原始描述（保留语义，仅做首尾空格与连续空格压缩）
+        location: 明细行检测部位列
+        example: "一层墙 19×D-F 轴"
+        note: "每行仅包含 test_location 和 estimated_strength_mpa 两个字段，不提取序号"
+
+      - name: rows[].estimated_strength_mpa
+        type: number
+        required: false
+        description: 该检测部位对应的强度推定值（MPa），空白/占位符为 null，保留 1 位小数
+        location: 明细行最后一列"强度推定值"
+        example: 15.0
+        extraction_rule: "每个检测部位只有一个强度推定值，不计算、不推断，仅抽取"

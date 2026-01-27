@@ -1,0 +1,23 @@
+{
+  "name": "delegate-info-recognition",
+  "displayName": "委托信息识别",
+  "description": "自动识别委托单文档信息，支持解析PDF/图片格式并输出为JSON/CSV/Excel。",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "tags": ["data-extraction", "ocr", "qwen"],
+  "main": "parse.py",
+  "requirements": "requirements.txt",
+  "input": {
+    "type": "file",
+    "acceptedFormats": ["pdf", "png", "jpg", "jpeg"]
+  },
+  "output": {
+    "type": "structured",
+    "format": "json"
+  },
+  "environment": {
+    "python": ">=3.8",
+    "requiresEnv": true,
+    "envFile": ".env"
+  }
+}

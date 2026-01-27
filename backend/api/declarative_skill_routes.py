@@ -65,6 +65,14 @@ def _pick_value(record: Dict[str, Any], keys: list[str]) -> Optional[Any]:
     for key in keys:
         if key in record and record[key] not in (None, ""):
             return record[key]
+            
+    # Also check inside 'meta' dictionary if it exists
+    if "meta" in record and isinstance(record["meta"], dict):
+        meta_dict = record["meta"]
+        for key in keys:
+             if key in meta_dict and meta_dict[key] not in (None, ""):
+                return meta_dict[key]
+
     return None
 
 
@@ -116,6 +124,99 @@ def _normalize_record(record: Any, table_type: Optional[str]) -> Dict[str, Any]:
     return normalized
 
 
+def _extract_report_entries(report: Any) -> list[dict[str, Any]]:
+    """
+    Normalize processing_report.json into a list of entry dicts.
+    Supports list reports (brick) and dict reports with details/results (mortar).
+    """
+    if isinstance(report, list):
+        return [entry for entry in report if isinstance(entry, dict)]
+    if isinstance(report, dict):
+        details = report.get("details") or report.get("results") or []
+        if isinstance(details, list):
+            return [entry for entry in details if isinstance(entry, dict)]
+    return []
+
+
+def _extract_entry_data(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    Pull record data from a report entry.
+    Some skills put data in top-level entry fields (mortar), others under data/results.
+    """
+    data = entry.get("data") or entry.get("result") or entry.get("results")
+    if data:
+        if isinstance(data, dict):
+            return [data]
+        if isinstance(data, list):
+            return [item for item in data if isinstance(item, dict)]
+        return []
+
+    # Fallback: treat entry itself as the record, stripping status/error fields.
+    fallback = {
+        k: v
+        for k, v in entry.items()
+        if k not in {"status", "error", "errors", "warnings"}
+    }
+    return [fallback] if fallback else []
+
+
+def _resolve_report_path(skill_name: str, output_base: Path) -> Optional[Path]:
+    """
+    Prefer the provided output_base, but fall back to skill's default data/output
+    when scripts ignore the output_dir argument.
+    """
+    primary = output_base / "processing_report.json"
+    if primary.exists():
+        return primary
+
+    loader = skill_registry._declarative_loader
+    if loader is not None:
+        try:
+            skill_dir = loader._resolve_skill_dir(skill_name)
+        except Exception:
+            skill_dir = None
+        if skill_dir:
+            fallback = skill_dir / "data" / "output" / "processing_report.json"
+            if fallback.exists():
+                return fallback
+
+    return None
+
+
+def _pick_output_arg(skill_name: str) -> str:
+    """
+    Decide which CLI flag to use for output directory.
+    Some skills use --output-dir, others use --output.
+    """
+    loader = skill_registry._declarative_loader
+    skill_dir = None
+    if loader is not None:
+        try:
+            skill_dir = loader._resolve_skill_dir(skill_name)
+        except Exception:
+            skill_dir = None
+    if not skill_dir:
+        return "--output-dir"
+
+    candidates = [
+        skill_dir / "parse.py",
+        skill_dir / "scripts" / "batch_process.py",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            content = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        if "--output-dir" in content:
+            return "--output-dir"
+        if "--output" in content:
+            return "--output"
+
+    return "--output-dir"
+
+
 def _build_payload(
     record: Any,
     table_type: Optional[str],
@@ -137,6 +238,7 @@ def _build_payload(
             "\u63a7\u5236\u7f16\u53f7",
             "\u8bb0\u5f55\u7f16\u53f7",
             "record_code",
+            "record_no",
         ],
     )
     test_location_text = _pick_value(
@@ -144,6 +246,7 @@ def _build_payload(
         [
             "\u68c0\u6d4b\u90e8\u4f4d",
             "test_location_text",
+            "test_location",
         ],
     )
     design_strength_grade = _pick_value(
@@ -160,6 +263,7 @@ def _build_payload(
             "\u6df7\u51dd\u571f\u5f3a\u5ea6\u63a8\u5b9a\u503c(MPa)",
             "\u6df7\u51dd\u571f\u5f3a\u5ea6\u63a8\u5b9a\u503c\uff08MPa\uff09",
             "strength_estimated_mpa",
+            "estimated_strength_mpa",
         ],
     )
     avg_strength = _pick_value(
@@ -168,6 +272,7 @@ def _build_payload(
             "\u6d4b\u533a\u5f3a\u5ea6\u5e73\u5747\u503c(MPa)",
             "\u6d4b\u533a\u5f3a\u5ea6\u5e73\u5747\u503c\uff08MPa\uff09",
             "test_result",
+            "converted_strength_mpa",
         ],
     )
     carbonation_depth = _pick_value(
@@ -323,7 +428,8 @@ async def concrete_table_recognition(
             )
 
         # Prepare script arguments
-        script_args = [tmp_path, "--format", format, "--output-dir", str(output_base)]
+        output_arg = _pick_output_arg(skill_name)
+        script_args = [tmp_path, "--format", format, output_arg, str(output_base)]
 
         # Use script execution only; LLM is disabled for deterministic runs
         result = await executor.execute(
@@ -335,17 +441,16 @@ async def concrete_table_recognition(
         )
 
         extracted_records: list[dict[str, Any]] = []
-        report_path = output_base / "processing_report.json"
-        if report_path.exists():
+        report_path = _resolve_report_path("concrete-table-recognition", output_base)
+        if report_path:
             report = json.loads(report_path.read_text(encoding="utf-8"))
-            for entry in report:
-                if not entry.get("success"):
+            for entry in _extract_report_entries(report):
+                if entry.get("success") is False:
                     continue
-                table_type = entry.get("type")
-                data = entry.get("data") or []
-                if isinstance(data, dict):
-                    data = [data]
-                for record in data:
+                if entry.get("status") == "error":
+                    continue
+                table_type = entry.get("type") or entry.get("table_type")
+                for record in _extract_entry_data(entry):
                     extracted_records.append({"table_type": table_type, "data": record})
         else:
             output = result.get("script_result", {}).get("output")
@@ -359,6 +464,10 @@ async def concrete_table_recognition(
         script_result = result.get("script_result", {})
         script_success = bool(script_result.get("success"))
         script_error = script_result.get("error")
+        script_stderr = script_result.get("stderr")
+        if not script_success and script_stderr:
+            stderr_preview = script_stderr.strip().splitlines()[-5:]
+            script_error = f"{script_error or 'Script failed'}; stderr: {' | '.join(stderr_preview)}"
 
         record_results: list[dict[str, Any]] = []
 
@@ -507,28 +616,36 @@ async def run_skill_with_file(
         if not output_dir:
             temp_output_dir = output_base
 
-        script_args = [tmp_path, "--format", format, "--output-dir", str(output_base)]
+        output_arg = _pick_output_arg(skill_name)
+        script_args = [tmp_path, "--format", format, output_arg, str(output_base)]
 
+        # 设置 Poppler 路径
+        env = {}
+        # 尝试查找 Poppler
+        poppler_search_path = Path("D:/All_about_AI/projects/reportplatform_autore_skills/Reportplatformautore/backend/poppler-windows/Release-25.12.0-0/poppler-25.12.0/Library/bin")
+        if poppler_search_path.exists():
+             env["POPPLER_PATH"] = str(poppler_search_path)
+        
         result = await executor.execute(
             skill_name=skill_name,
             user_input=f"process file: {file.filename}",
             use_llm=False,
             use_script=True,
             script_args=script_args,
+            env=env
         )
 
         extracted_records: list[dict[str, Any]] = []
-        report_path = output_base / "processing_report.json"
-        if report_path.exists():
+        report_path = _resolve_report_path(skill_name, output_base)
+        if report_path:
             report = json.loads(report_path.read_text(encoding="utf-8"))
-            for entry in report:
-                if not entry.get("success"):
+            for entry in _extract_report_entries(report):
+                if entry.get("success") is False:
                     continue
-                table_type = entry.get("type")
-                data = entry.get("data") or []
-                if isinstance(data, dict):
-                    data = [data]
-                for record in data:
+                if entry.get("status") == "error":
+                    continue
+                table_type = entry.get("type") or entry.get("table_type")
+                for record in _extract_entry_data(entry):
                     extracted_records.append({"table_type": table_type, "data": record})
         else:
             output = result.get("script_result", {}).get("output")
@@ -542,6 +659,10 @@ async def run_skill_with_file(
         script_result = result.get("script_result", {})
         script_success = bool(script_result.get("success"))
         script_error = script_result.get("error")
+        script_stderr = script_result.get("stderr")
+        if not script_success and script_stderr:
+            stderr_preview = script_stderr.strip().splitlines()[-5:]
+            script_error = f"{script_error or 'Script failed'}; stderr: {' | '.join(stderr_preview)}"
 
         record_results: list[dict[str, Any]] = []
 
@@ -704,32 +825,55 @@ async def confirm_declarative_result(request: ConfirmDeclarativeResultRequest):
             table_type = record.get("table_type")
             data = record.get("data")
 
-        normalized = _normalize_record(data, table_type)
-        payload = _build_payload(
-            record=data,
-            table_type=table_type,
-            project_id=request.project_id,
-            node_id=request.node_id,
-            run_id=run_id,
-            source_hash=request.source_hash,
-            skill_name=request.skill_name,
-            record_index=idx,
-        )
+        # Determine if we need to expand rows (e.g. Mortar Skill style)
+        records_to_process = []
+        if isinstance(data, dict) and "rows" in data and isinstance(data["rows"], list) and len(data["rows"]) > 0:
+            meta = data.get("meta", {})
+            if not isinstance(meta, dict):
+                meta = {}
+            
+            for row in data["rows"]:
+                if isinstance(row, dict):
+                     # Merge meta fields into row for flat storage
+                     # Row fields take precedence
+                     merged = {**meta, **row}
+                     records_to_process.append(merged)
+        else:
+             records_to_process.append(data)
+        
+        for item_data in records_to_process:
+            normalized = _normalize_record(item_data, table_type)
+            payload = _build_payload(
+                record=item_data,
+                table_type=table_type,
+                project_id=request.project_id,
+                node_id=request.node_id,
+                run_id=run_id,
+                source_hash=request.source_hash,
+                skill_name=request.skill_name,
+                record_index=idx,
+            )
 
-        try:
-            record_id = insert_professional_data(payload)
-        except Exception as exc:
-            raise HTTPException(
-                status_code=500,
-                detail=f"confirm_failed:index={idx}, error={exc}",
-            ) from exc
-        persisted.append(
-            {
-                "record_id": record_id,
-                "status": "success" if record_id else "failed",
-                "data": normalized,
-            }
-        )
+            try:
+                record_id = insert_professional_data(payload)
+            except Exception as exc:
+                # Log error but try to continue or fail?
+                # For now we propagate failure for the batch if one fails, to keep consistent with previous behavior logic
+                # But since we expanded, maybe we should track failures individually.
+                # The original code raised HTTPException on exception.
+                print(f"Error persisting record index {idx}: {exc}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"confirm_failed:index={idx}, error={exc}",
+                ) from exc
+            
+            persisted.append(
+                {
+                    "record_id": record_id,
+                    "status": "success" if record_id else "failed",
+                    "data": normalized,
+                }
+            )
 
     success = all(entry["status"] == "success" for entry in persisted) if persisted else False
     return {
@@ -748,9 +892,13 @@ async def list_skills():
     Returns:
         包含命令式和声明式技能列表的字典
     """
+    print("DEBUG: Received request for /skills/list")
     try:
-        return skill_registry.list_skills()
+        skills = skill_registry.list_skills()
+        print(f"DEBUG: Skills retrieved: {skills}")
+        return skills
     except Exception as e:
+        print(f"DEBUG: Error in list_skills: {e}")
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to list skills: {str(e)}")

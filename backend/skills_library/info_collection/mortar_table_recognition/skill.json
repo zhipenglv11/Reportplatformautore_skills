@@ -1,0 +1,23 @@
+{
+  "name": "mortar_strength_extractor",
+  "displayName": "砂浆强度检测数据抽取",
+  "description": "从砂浆强度检测报告中抽取相关字段信息,支持 PDF 和图片格式",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "tags": ["data-extraction", "ocr", "mortar-testing", "claude"],
+  "main": "parse.py",
+  "requirements": "requirements.txt",
+  "input": {
+    "type": "file",
+    "acceptedFormats": ["pdf", "png", "jpg", "jpeg"]
+  },
+  "output": {
+    "type": "structured",
+    "format": "json"
+  },
+  "environment": {
+    "python": ">=3.8",
+    "requiresEnv": true,
+    "envFile": ".env"
+  }
+}

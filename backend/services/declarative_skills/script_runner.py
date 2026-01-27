@@ -23,6 +23,9 @@ class ScriptRunner:
         self._python_executable = self._resolve_python_executable()
 
     def _resolve_python_executable(self) -> str:
+        env_python = os.getenv("SKILL_PYTHON")
+        if env_python:
+            return env_python
         venv_candidates = [
             self.skill_dir / ".venv" / "Scripts" / "python.exe",
             self.skill_dir / "venv" / "Scripts" / "python.exe",
@@ -75,6 +78,13 @@ class ScriptRunner:
 
         # 构建环境变量
         script_env = dict(os.environ)
+        
+        # 将技能目录添加到 PYTHONPATH，确保脚本可以导入 scripts 模块
+        pythonpath = str(self.skill_dir)
+        if "PYTHONPATH" in script_env:
+            pythonpath = f"{pythonpath}{os.pathsep}{script_env['PYTHONPATH']}"
+        script_env["PYTHONPATH"] = pythonpath
+        
         if env:
             script_env.update(env)
 

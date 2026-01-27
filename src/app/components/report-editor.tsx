@@ -494,8 +494,9 @@ function ReportEditorContent({
         
         // 根据 templateStyle 自动映射 dataset_key
         const datasetKeyMap: Record<string, string> = {
-          'concrete_strength_table': 'concrete_rebound_tests',  // 表格输出
-          'concrete_strength_desc': 'concrete_strength_description',  // 描述文本输出
+          'concrete_strength_full': 'concrete_strength_comprehensive',  // 新的统一规则
+          'concrete_strength_table': 'concrete_rebound_tests',  // 表格输出（旧）
+          'concrete_strength_desc': 'concrete_strength_description',  // 描述文本输出（旧）
           'mortar_strength_data': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
           'mortar_strength_desc': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
           'brick_strength_table': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key

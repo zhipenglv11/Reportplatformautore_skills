@@ -1,0 +1,99 @@
+# Mortar Strength Inspection Fields
+# 砂浆强度检测字段定义
+
+# 表头字段(meta)
+meta_fields:
+  - name: table_id
+    chinese_name: 控制编号(表格ID)
+    type: string
+    required: true
+    location: 左上角
+    description: 表格的控制编号/ID
+    example: KJQR-056-206
+    
+  - name: record_no
+    chinese_name: 原始记录编号
+    type: string
+    required: true
+    location: "右上角 No: xxxxx"
+    description: 原始记录编号
+    example: "2500108"
+    
+  - name: test_date
+    chinese_name: 检测日期
+    type: date
+    required: true
+    description: 进行砂浆强度检测的日期
+    example: "2023-02-26"
+    format: YYYY-MM-DD(无法规范化则保留原字符串)
+    
+  - name: instrument_model
+    chinese_name: 仪器型号
+    type: string
+    required: false
+    description: 检测使用的仪器型号
+    example: SJY-800B
+
+# 行字段(rows)
+row_fields:
+  - name: seq
+    chinese_name: 序号
+    type: integer
+    required: false
+    description: 表格中的序号列
+    example: 1
+    notes: 识别不到允许 null,不允许自动补号/重排
+    
+  - name: test_location
+    chinese_name: 检测部位
+    type: string
+    required: true
+    column_position: 第一列
+    description: 检测的具体部位描述
+    example: 一层墙 19×D-F 轴
+    normalization: 去首尾空格、压缩连续空格为1个
+    notes: 不改写语义,不拆分楼层/轴线字段
+    
+  - name: converted_strength_mpa
+    chinese_name: 砂浆抗压强度换算值
+    type: number
+    required: false
+    column_position: 倒数第二列
+    description: 砂浆抗压强度换算值(MPa)
+    example: 2.0
+    unit: MPa
+    precision: 1位小数
+    notes: 若为空、为"—"/"//"等占位符,输出 null
+    
+  - name: estimated_strength_mpa
+    chinese_name: 单个构件强度推定值
+    type: number
+    required: false
+    column_position: 倒数第一列
+    description: 单个构件强度推定值(MPa)
+    example: 1.8
+    unit: MPa
+    precision: 1位小数
+    notes: 若为空、为"—"/"//"等占位符,输出 null
+
+# 数据格式规范
+format_rules:
+  date:
+    - 优先输出 YYYY-MM-DD 格式
+    - 若无法可靠规范化(手写模糊/缺日/月),则保留原字符串
+    - 禁止推断补全
+    
+  number:
+    - 类型:number | null
+    - 若为空、为"—"/"//"等占位符:输出 null
+    - 若为数值:保留1位小数
+    
+  integer:
+    - 类型:integer | null
+    - 能识别就输出;识别不到允许 null
+    - 不允许自动补号/重排
+    
+  string:
+    - 类型:string | null
+    - 轻量清洗:去首尾空格、把连续空格压成1个
+    - 不改写语义

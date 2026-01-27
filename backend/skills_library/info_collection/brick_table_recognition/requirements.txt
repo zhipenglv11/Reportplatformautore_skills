@@ -1,0 +1,19 @@
+﻿# Brick table recognition dependencies
+
+# Qwen API (OpenAI-compatible)
+dashscope>=1.14.0
+openai>=2.15.0
+
+# PDF processing
+pdf2image>=1.16.3
+Pillow>=10.0.0
+
+# Env management
+python-dotenv>=1.0.0
+
+# Data output
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# Image processing
+opencv-python>=4.8.0

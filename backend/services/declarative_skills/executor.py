@@ -79,6 +79,7 @@ class DeclarativeSkillExecutor:
             script_name = kwargs.get("script_name", skill.script_path.name)
             script_args = kwargs.get("script_args", [])
             script_timeout = kwargs.get("script_timeout", 300)
+            script_env = kwargs.get("env", {})
 
             script_result = script_runner.run_script(
                 script_name=script_name,
@@ -88,6 +89,7 @@ class DeclarativeSkillExecutor:
                     "llm_response": llm_response,
                     "context": context or {},
                 },
+                env=script_env,
                 timeout=script_timeout,
             )
 

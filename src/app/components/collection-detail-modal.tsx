@@ -397,56 +397,223 @@ export default function CollectionDetailModal({
         const finalData = Array.isArray(data) ? newData : newData[0];
         handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
     };
+
+    const handleRowUpdate = (itemIndex: number, arrayKey: string, rowIndex: number, rowValKey: string, value: string) => {
+        const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+        if (newData[itemIndex] && newData[itemIndex][arrayKey] && Array.isArray(newData[itemIndex][arrayKey])) {
+             if (newData[itemIndex][arrayKey][rowIndex]) {
+                 newData[itemIndex][arrayKey][rowIndex][rowValKey] = value;
+                 const finalData = Array.isArray(data) ? newData : newData[0];
+                 handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+             }
+        }
+    };
     
     // Save on blur using the current data in the closure (fresh on re-render)
     const handleSaveCurrent = () => {
          handleJsonSave(fileId, JSON.stringify(data, null, 2)); 
     };
 
+    // Dictionary for label translation
+    const labelMap: Record<string, string> = {
+      'table_id': '表格编号',
+      'commission_id': '委托单编号',
+      'test_date': '检测日期',
+      'instrument_id': '设备编号',
+      'brick_type': '砖块类型',
+      'strength_grade': '设计强度等级',
+      'rows': '回弹测区数据明细',
+      'items': '检测项明细',
+      'test_location': '测区位置/编号',
+      'estimated_strength_mpa': '推定强度 (MPa)',
+      'converted_strength_mpa': '换算强度 (MPa)',
+      'seq': '序号',
+      'meta': '表格元数据',
+      'control_id': '控制编号',
+      'record_no': '记录编号',
+      'house_name': '房屋名称',
+      'table_type': '表格类型',
+      'test_location_text': '检测部位',
+      'design_strength_grade': '设计强度等级',
+      'modification_location': '拆改位置',
+      'modification_description': '拆改描述',
+      'photo_index': '照片编号',
+      'photo_no': '照片编号',
+      'damage_location': '损伤位置',
+      'damage_description': '损伤描述'
+    };
+    const getLabel = (k: string) => labelMap[k] || k;
+
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         {items.map((item: any, idx: number) => {
           // Try to get confidence from item (if exists) or mock it for design if missing (optional)
-          // For now, we only show if it exists or if we decide to default.
           const confidence = item.confidence !== undefined ? Number(item.confidence) : null;
           
           return (
           <div key={idx} className="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-all duration-200">
-            <div className="bg-slate-50/80 px-3 py-1.5 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
-                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
+                 <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ring-2 ring-blue-100"></div>
                     记录 #{idx + 1}
                  </span>
                  {/* Confidence Badge */}
                  {confidence !== null && (
-                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex items-center gap-1 ${getConfidenceColor(confidence)}`}>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 ${getConfidenceColor(confidence)}`}>
                         <Sparkles className="w-3 h-3" />
                         {confidence <= 1 ? Math.round(confidence * 100) : confidence}% 置信度
                     </span>
                  )}
             </div>
             <div className="divide-y divide-slate-50">
+               {/* 先渲染非数组字段（meta 信息） */}
                {Object.entries(item).map(([key, val]) => {
-                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence';
+                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'signoff' || key === 'status';
                    if (isSystem) return null;
+                   if (Array.isArray(val)) return null; // 跳过数组，后面渲染
+                   
+                   // 特殊处理 meta 对象：展开其子字段
+                   if (key === 'meta' && typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                     return (
+                       <div key={key} className="border-t border-slate-100">
+                         <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100">
+                           <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{getLabel(key)}</span>
+                         </div>
+                         {Object.entries(val).map(([subKey, subVal]) => (
+                           <div key={subKey} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
+                              <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
+                                  <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(subKey)}>{getLabel(subKey)}</span>
+                              </div>
+                              <div className="sm:w-[65%] flex items-center relative">
+                                 <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                                 <input 
+                                    type="text" 
+                                    className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
+                                    placeholder="-"
+                                    value={String(subVal ?? '')}
+                                    onChange={(e) => {
+                                      const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+                                      if (newData[idx] && newData[idx][key]) {
+                                        newData[idx][key][subKey] = e.target.value;
+                                        const finalData = Array.isArray(data) ? newData : newData[0];
+                                        handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+                                      }
+                                    }}
+                                    onBlur={handleSaveCurrent}
+                                 /> 
+                              </div>
+                           </div>
+                         ))}
+                       </div>
+                     );
+                   }
 
                    return ( 
-                     <div key={key} className="flex flex-col sm:flex-row group bg-white hover:bg-slate-50/60 transition-colors">
-                        <div className="sm:w-[35%] px-3 py-1.5 flex items-center">
-                            <span className="text-[11px] font-medium text-slate-600 truncate select-none leading-4" title={key}>{key}</span>
+                     <div key={key} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
+                        <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
+                            <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(key)}>{getLabel(key)}</span>
                         </div>
                         <div className="sm:w-[65%] flex items-center relative">
-                           <div className="hidden sm:block absolute left-0 top-3 bottom-3 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                           <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
                            <input 
                               type="text" 
-                              className="w-full h-full px-3 py-1.5 text-[11px] leading-4 text-slate-800 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-medium"
-                              value={val as string}
+                              className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
+                              placeholder="-"
+                              value={val as string ?? ''}
                               onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
                               onBlur={handleSaveCurrent}
                            /> 
                         </div>
                      </div>
                    );
+               })}
+               
+               {/* 然后渲染数组字段（表格数据） */}
+               {Object.entries(item).map(([key, val]) => {
+                   if (!Array.isArray(val)) return null;
+                   if (val.length === 0) return null;
+                   
+                   // Check if it's an array of objects to render as table
+                   if (typeof val[0] === 'object') {
+                      // 过滤掉 seq 列
+                      const subHeaders = Object.keys(val[0]).filter(h => h !== 'seq');
+                      return (
+                        <div key={key} className="flex flex-col border-t border-slate-100 mt-1">
+                          <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100 flex items-center gap-2">
+                            <LayoutList className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{getLabel(key)}</span>
+                          </div>
+                          <div className="overflow-x-auto">
+                             <table className="w-full text-left border-collapse table-fixed">
+                               <thead>
+                                 <tr className="bg-slate-50/30 border-b border-slate-100">
+                                   <th className="px-2 py-1.5 w-8 text-[10px] font-medium text-slate-400 text-center bg-slate-50/20">#</th>
+                                   {subHeaders.map(h => {
+                                     let widthClass = '';
+                                     if (h === 'modification_location') widthClass = 'w-24';
+                                     else if (h === 'photo_no') widthClass = 'w-16';
+                                     else if (h === 'test_location') widthClass = 'w-24';
+                                     else if (h === 'modification_description') widthClass = 'w-auto'; 
+                                     else widthClass = 'w-24'; // Default narrow for others to give space to description
+                                     
+                                     return (
+                                       <th key={h} className={`px-2 py-1.5 text-[10px] font-bold text-slate-500 whitespace-normal bg-slate-50/20 ${widthClass}`}>{getLabel(h)}</th>
+                                     );
+                                   })}
+                                 </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-50">
+                                 {val.map((row: any, rIdx: number) => (
+                                   <tr key={rIdx} className="hover:bg-slate-50/50 transition-colors group/row">
+                                     <td className="px-2 py-1 text-[10px] text-slate-400 text-center font-mono select-none align-top pt-2">{rIdx + 1}</td>
+                                     {subHeaders.map(h => {
+                                       const cellVal = row[h] ?? '';
+                                       const isLongText = h === 'modification_description' || h === 'damage_description';
+                                       
+                                       return (
+                                       <td key={h} className="px-1 py-0.5 align-top">
+                                         {isLongText ? (
+                                            <textarea
+                                                className="w-full bg-transparent hover:bg-white border border-transparent hover:border-slate-200 focus:bg-white focus:border-blue-400 rounded px-1.5 py-1 text-[10px] text-slate-700 font-medium transition-all focus:outline-none placeholder:text-slate-300 resize-none overflow-hidden leading-relaxed"
+                                                placeholder="-"
+                                                value={String(cellVal)}
+                                                rows={1}
+                                                style={{ minHeight: '28px' }}
+                                                onInput={(e) => {
+                                                    const target = e.currentTarget;
+                                                    target.style.height = 'auto';
+                                                    target.style.height = target.scrollHeight + 'px';
+                                                }}
+                                                ref={(el) => {
+                                                    if (el) {
+                                                        el.style.height = 'auto';
+                                                        el.style.height = el.scrollHeight + 'px';
+                                                    }
+                                                }}
+                                                onChange={(e) => handleRowUpdate(idx, key, rIdx, h, e.target.value)}
+                                                onBlur={handleSaveCurrent}
+                                            />
+                                         ) : (
+                                            <input 
+                                                type="text" 
+                                                placeholder="-"
+                                                className="w-full bg-transparent hover:bg-white border border-transparent hover:border-slate-200 focus:bg-white focus:border-blue-400 rounded px-1.5 py-0.5 text-[10px] text-slate-700 font-medium transition-all focus:outline-none placeholder:text-slate-300 h-7"
+                                                value={String(cellVal)}
+                                                onChange={(e) => handleRowUpdate(idx, key, rIdx, h, e.target.value)}
+                                                onBlur={handleSaveCurrent}
+                                            />
+                                         )}
+                                       </td>
+                                     )})}
+                                   </tr>
+                                 ))}
+                               </tbody>
+                             </table>
+                          </div>
+                        </div>
+                      );
+                   }
+                   return null;
                })}
             </div>
           </div>

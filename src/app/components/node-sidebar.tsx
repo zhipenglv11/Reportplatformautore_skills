@@ -24,6 +24,8 @@ import {
   PenLine,
   ClipboardCheck,
   FileText,
+  UploadCloud,
+  Sparkles,
 } from "lucide-react";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Node } from "reactflow";
@@ -320,6 +322,18 @@ export default function NodeSidebar({
 
   const collectionCategories = [
     {
+      title: "智能采集",
+      nodes: [
+        {
+          type: "multi-doc-upload",
+          label: "多文档智能上传",
+          icon: UploadCloud,
+          color: "sky",
+          description: "批量上传文档，AI自动识别并分发",
+        },
+      ],
+    },
+    {
       title: "检测前信息",
       nodes: [
         {
@@ -539,17 +553,24 @@ export default function NodeSidebar({
                           .map((node) => {
             const Icon = node.icon;
             const hasNodeOnCanvas = nodes?.some((n) => n.type === node.type) || false;
+            
+            // Only enable specific skills as requested
+            const enabledSkills = ["委托方资料", "砂浆强度", "混凝土强度", "砖强度", "现场情况检查", "多文档智能上传"];
+            const isEnabled = enabledSkills.includes(node.label);
 
             return (
               <button
                 key={node.type}
-                onClick={() => onAddNode(node.type)}
+                disabled={!isEnabled}
+                title={!isEnabled ? "该功能尚未开放" : ""}
+                onClick={() => isEnabled && onAddNode(node.type)}
                                 className={cn(
                                   "w-full px-2 py-1.5 rounded border transition-all text-left group",
-                                  "hover:shadow-sm",
-                                  hasNodeOnCanvas
+                                  isEnabled && "hover:shadow-sm",
+                                  !isEnabled && "opacity-50 cursor-not-allowed bg-slate-50",
+                                  isEnabled && hasNodeOnCanvas
                                     ? "border-slate-300 bg-slate-100 hover:bg-slate-200"
-                                    : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                                    : isEnabled ? "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50" : "border-slate-200"
                                 )}
               >
                                 <div className="flex items-center gap-2">
@@ -563,6 +584,7 @@ export default function NodeSidebar({
                   >
                                     <Icon className={cn(
                                       "w-3 h-3",
+                                      !isEnabled ? "text-slate-300" : 
                                       hasNodeOnCanvas
                                         ? "text-slate-700"
                                         : "text-slate-500"
@@ -571,6 +593,7 @@ export default function NodeSidebar({
                                   <div className="flex-1 min-w-0">
                                     <div className={cn(
                                       "text-xs font-medium truncate",
+                                      !isEnabled ? "text-slate-400" :
                                       hasNodeOnCanvas
                                         ? "text-slate-800"
                                         : "text-slate-700"

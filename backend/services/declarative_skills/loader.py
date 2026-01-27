@@ -83,7 +83,7 @@ class SkillLoader:
         Returns:
             包含元数据和内容的字典
         """
-        content = skill_md_path.read_text(encoding="utf-8")
+        content = skill_md_path.read_text(encoding="utf-8-sig")
 
         # 提取 YAML frontmatter
         frontmatter_pattern = r'^---\s*\n(.*?)\n---\s*\n(.*)$'
@@ -115,7 +115,7 @@ class SkillLoader:
             字段定义字典
         """
         try:
-            with open(fields_path, "r", encoding="utf-8") as f:
+            with open(fields_path, "r", encoding="utf-8-sig") as f:
                 return yaml.safe_load(f) or {}
         except yaml.YAMLError as e:
             raise ValueError(f"Failed to parse fields.yaml: {e}")
