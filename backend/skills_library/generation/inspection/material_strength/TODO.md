@@ -1,252 +1,159 @@
-# Material Strength Skills - 后续工作清单
+# Material Strength Skills - 后续工作
 
-生成时间：2026-01-28
-当前状态：父子架构已创建，concrete_strength已完整实现
+**当前状态**：父子架构已创建，concrete_strength 完整实现  
+**最后更新**：2026-01-28  
+**Git分支**：feature/generation-skills
 
 ---
 
-## 🎯 工作清单（按优先级）
-
-### ✅ 已完成
+## ✅ 已完成
 
 - [x] 创建父子skill架构
 - [x] 实现父skill编排逻辑（assemble.py）
 - [x] 完整实现concrete_strength子skill
-  - [x] SKILL.md
-  - [x] fields.yaml
-  - [x] render.md
-  - [x] impl/parse.py
+  - [x] SKILL.md, fields.yaml, render.md, impl/parse.py
 - [x] 创建brick_strength和mortar_strength框架
-- [x] Git提交（commit 6088cae）
+- [x] Git提交（commit 6088cae, c1708bb）
 
 ---
 
-### 🔴 高优先级（核心功能）
+## 🔴 高优先级（本周必做）
 
-#### 1. **更新父skill配置文件**
-**当前问题**：fields.yaml和render.md还是v1.0单体架构的配置
+### 1. 推送到远程仓库
+```bash
+git push origin feature/generation-skills
+```
 
-**需要做的：**
-- [ ] 重写 `fields.yaml` 为父skill版本
-  - 只定义控制参数（project_id, node_id, material_order等）
-  - 定义子skills注册信息
-  - 定义编排策略
-- [ ] 重写 `render.md` 为父skill版本
-  - 定义段落组装规则
-  - 定义总述生成规范（如果需要）
-  - 定义过渡句规则
+### 2. 更新父skill配置文件
+- [ ] 更新 `fields.yaml` → 父skill版本（控制参数、子skills注册）
+- [ ] 更新 `render.md` → 段落组装规则
+- [ ] 更新 `impl/__init__.py` → 导出 assemble_material_strength
 
-**文件路径：**
-- `backend/skills_library/generation/inspection/material_strength/fields.yaml`
-- `backend/skills_library/generation/inspection/material_strength/render.md`
-
----
-
-#### 2. **与declarative_skills系统集成**
-**当前问题**：assemble.py是独立的，还没有与现有的SkillLoader和Executor集成
-
-**需要做的：**
-- [ ] 检查 `services/declarative_skills/loader.py` 是否支持父子skill
+### 3. 系统集成检查
+- [ ] 检查 `services/declarative_skills/loader.py` 是否支持父子结构
 - [ ] 检查 `services/declarative_skills/executor.py` 的调用方式
-- [ ] 可能需要在executor中添加对父skill的识别和调用逻辑
-- [ ] 更新 `impl/__init__.py` 导出assemble函数
+- [ ] 确认如何调用父skill的 assemble 函数
 
-**文件路径：**
-- `backend/services/declarative_skills/loader.py`
-- `backend/services/declarative_skills/executor.py`
-- `backend/skills_library/generation/inspection/material_strength/impl/__init__.py`
-
----
-
-#### 3. **完善brick_strength子skill**
-**当前状态**：只有SKILL.md框架
-
-**需要做的：**
+### 4. 完善brick_strength子skill
 ```bash
 # 复制concrete_strength作为模板
-cd backend/skills_library/generation/inspection/material_strength/subskills/brick_strength
-
-# 创建文件：
-- [ ] fields.yaml   # 基于concrete修改，移除carbonation_depth
-- [ ] render.md     # 修改描述模板
-- [ ] impl/parse.py # 修改查询条件和字段提取逻辑
-- [ ] impl/__init__.py
+cd subskills/brick_strength/
+# 创建：fields.yaml, render.md, impl/parse.py
 ```
-
-**主要修改点：**
-- Query条件：`test_item LIKE '%砌体砖%' OR LIKE '%砖强度%'`
-- 强度等级格式：`MU\d+` 而不是 `C\d+`
+**关键修改点**：
+- Query: `test_item LIKE '%砌体砖%'`
+- 强度等级: `MU\d+`（而非 C\d+）
 - 移除碳化深度字段
-- 规范依据：GB/T 50315-2011、GB 50003-2011
+- 规范: GB/T 50315-2011
 
----
-
-#### 4. **完善mortar_strength子skill**
-**当前状态**：只有SKILL.md框架
-
-**需要做的：**
+### 5. 完善mortar_strength子skill
 ```bash
-cd backend/skills_library/generation/inspection/material_strength/subskills/mortar_strength
-
-# 创建文件：
-- [ ] fields.yaml   # 基于concrete修改
-- [ ] render.md     # 修改描述模板  
-- [ ] impl/parse.py # 修改查询条件
-- [ ] impl/__init__.py
+cd subskills/mortar_strength/
+# 创建：fields.yaml, render.md, impl/parse.py
 ```
-
-**主要修改点：**
-- Query条件：`test_item LIKE '%砂浆%'`
-- 强度等级格式：`M\d+\.\d+` (如M5.0)
-- 移除碳化深度字段
-- 规范依据：JGJ/T 70-2009
-- 检测单位：测点 而不是 构件
+**关键修改点**：
+- Query: `test_item LIKE '%砂浆%'`
+- 强度等级: `M\d+\.\d+`（如M5.0）
+- 规范: JGJ/T 70-2009
 
 ---
 
-### 🟡 中优先级（完善功能）
+## 🟡 中优先级（下周）
 
-#### 5. **更新README文档**
-**当前问题**：README.md还是v1.0的说明
+### 6. 编写测试
+```
+tests/skills/generation/material_strength/
+├── test_assemble.py           # 父skill编排逻辑
+├── test_concrete_strength.py  # concrete子skill
+├── test_brick_strength.py
+└── test_mortar_strength.py
+```
 
-**需要做的：**
+### 7. 更新README文档
 - [ ] 更新架构说明（父子结构图）
-- [ ] 更新使用示例（如何调用父skill）
-- [ ] 添加子skills说明
-- [ ] 添加"如何添加新材料类型"的指南
-
-**文件路径：**
-- `backend/skills_library/generation/inspection/material_strength/README.md`
+- [ ] 添加使用示例
+- [ ] 添加"如何添加新材料"指南
 
 ---
 
-#### 6. **编写单元测试**
-**需要做的：**
-```bash
-tests/skills/generation/inspection/material_strength/
-├── test_assemble.py           # 测试父skill编排逻辑
-├── test_concrete_strength.py  # 测试concrete子skill
-├── test_brick_strength.py     # 测试brick子skill
-└── test_mortar_strength.py    # 测试mortar子skill
+## 🟢 低优先级（后续）
+
+### 8. 集成测试
+- [ ] 端到端测试：info_collection → generation
+- [ ] 与API路由集成测试
+
+### 9. 性能优化
+- [ ] 子skill并行调用（如果可能）
+- [ ] 数据库查询优化
+
+### 10. 文档完善
+- [ ] API文档
+- [ ] 架构图（Mermaid）
+
+---
+
+## 📁 关键文件位置
+
+```
+material_strength/
+├── SKILL.md                    ✅ v2.0 已更新
+├── fields.yaml                 ❌ 待更新
+├── render.md                   ❌ 待更新  
+├── README.md                   ⚠️  待更新
+├── impl/
+│   ├── assemble.py            ✅ 已实现
+│   └── __init__.py            ❌ 待更新
+└── subskills/
+    ├── concrete_strength/     ✅ 完整实现
+    ├── brick_strength/        ❌ 仅框架
+    └── mortar_strength/       ❌ 仅框架
 ```
 
-**测试场景：**
-- [ ] 父skill：有数据时正确调用子skills
-- [ ] 父skill：无数据时返回正确的空消息
-- [ ] 父skill：部分子skill失败时继续执行
-- [ ] 子skill：正确解析数据
-- [ ] 子skill：数据验证规则
-- [ ] 子skill：生成内容格式正确
+---
+
+## 🔍 系统集成点
+
+**需要检查的文件**：
+- `backend/services/declarative_skills/loader.py` - skill加载器
+- `backend/services/declarative_skills/executor.py` - skill执行器
+- `backend/api/skill_orchestrator_routes.py` - API路由
+
+**关键问题**：
+1. loader是否支持扫描 subskills/ 子目录？
+2. executor是否支持 async 函数调用？
+3. 如何传递 project_id 和 node_id？
 
 ---
 
-#### 7. **集成测试**
-**需要做的：**
-- [ ] 准备测试数据（mock professional_data）
-- [ ] 测试端到端流程：info_collection → professional_data → generation
-- [ ] 测试与现有API路由的集成
-- [ ] 测试证据链追溯
+## 💡 快速测试代码
 
-**文件路径：**
-- `tests/integration/test_material_strength_flow.py`
+```python
+# test_material_strength_demo.py
+import asyncio
+from backend.skills_library.generation.inspection.material_strength.impl.assemble import (
+    assemble_material_strength
+)
 
----
+async def test():
+    result = await assemble_material_strength(
+        project_id="test-001",
+        node_id="node-001"
+    )
+    print("✅ Success:", result.get("has_data"))
+    return result
 
-### 🟢 低优先级（优化增强）
-
-#### 8. **性能优化**
-- [ ] assemble.py中的子skill调用改为并行（如果可能）
-- [ ] 数据库查询优化（添加索引）
-- [ ] 缓存机制（避免重复查询）
-
-#### 9. **错误处理增强**
-- [ ] 添加更详细的日志
-- [ ] 添加Sentry等错误追踪
-- [ ] 友好的错误提示信息
-
-#### 10. **文档完善**
-- [ ] 添加API文档（OpenAPI/Swagger）
-- [ ] 添加架构图（使用Mermaid或PlantUML）
-- [ ] 添加开发者指南
+asyncio.run(test())
+```
 
 ---
 
-## 🚀 推荐的执行顺序
+## 📞 遇到问题时
 
-### **第一阶段：让系统能运行起来**（1-2天）
-1. 更新父skill的fields.yaml和render.md
-2. 与declarative_skills系统集成
-3. 更新README文档
-4. 推送到远程仓库
-
-### **第二阶段：完善子skills**（2-3天）
-5. 完善brick_strength子skill
-6. 完善mortar_strength子skill
-7. 编写单元测试
-
-### **第三阶段：测试和优化**（1-2天）
-8. 集成测试
-9. 性能优化
-10. 文档完善
+- **父子skill集成** → 查看 services/declarative_skills/
+- **复制子skill** → 使用 concrete_strength 作为模板
+- **数据库查询** → 参考 models/db.py
+- **测试编写** → 参考现有 tests/ 目录结构
 
 ---
 
-## 💡 关键注意事项
-
-### **集成时可能遇到的问题：**
-
-1. **SkillLoader识别问题**
-   - 现有loader可能不支持父子结构
-   - 需要检查如何加载subskills目录
-
-2. **异步调用问题**
-   - assemble.py使用了async/await
-   - 确保executor也支持异步
-
-3. **数据库连接问题**
-   - parse.py直接使用get_engine()
-   - 可能需要依赖注入或配置管理
-
-4. **Import路径问题**
-   - 子skills的相对导入路径
-   - 确保Python路径配置正确
-
----
-
-## 📝 快速检查清单
-
-在开始下一步之前，确认：
-
-- [ ] 当前分支：feature/generation-skills
-- [ ] 最新提交：6088cae
-- [ ] 文件结构完整：父skill + 1个完整子skill + 2个框架
-- [ ] 备份文件已创建：SKILL.md.v1.backup, parse.py.backup, fields.yaml.v1.backup
-- [ ] Git状态干净（或已commit）
-
----
-
-## 🎯 下一步建议
-
-**如果您想快速验证架构可行性：**
-→ 先做第一阶段的工作（系统集成）
-
-**如果您想完整实现所有材料类型：**
-→ 先完成brick_strength和mortar_strength
-
-**如果您想让同事review架构：**
-→ 先推送到远程，写一份架构说明文档
-
----
-
-## 📞 需要帮助时
-
-- 父子skill集成问题 → 查看 `services/declarative_skills/`
-- 子skill复制问题 → 使用concrete_strength作为模板
-- 测试编写问题 → 参考现有的test文件结构
-- 数据库查询问题 → 查看 `models/db.py`
-
----
-
-**文档版本**：v1.0
-**创建者**：GitHub Copilot
-**更新时间**：2026-01-28
+**下一步建议**：先推送到远程，再逐步完成高优先级任务。
