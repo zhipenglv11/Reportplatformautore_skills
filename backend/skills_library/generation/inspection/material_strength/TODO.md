@@ -14,27 +14,22 @@
   - [x] SKILL.md, fields.yaml, render.md, impl/parse.py
 - [x] 创建brick_strength和mortar_strength框架
 - [x] Git提交（commit 6088cae, c1708bb）
+- [x] 推送到远程仓库
+- [x] 更新父skill配置文件
+  - [x] fields.yaml → v2.0 父skill版本
+  - [x] render.md → 父skill段落组装规则
+  - [x] impl/__init__.py → 导出 assemble 函数
 
 ---
 
 ## 🔴 高优先级（本周必做）
 
-### 1. 推送到远程仓库
-```bash
-git push origin feature/generation-skills
-```
-
-### 2. 更新父skill配置文件
-- [ ] 更新 `fields.yaml` → 父skill版本（控制参数、子skills注册）
-- [ ] 更新 `render.md` → 段落组装规则
-- [ ] 更新 `impl/__init__.py` → 导出 assemble_material_strength
-
-### 3. 系统集成检查
+### 1. 系统集成检查
 - [ ] 检查 `services/declarative_skills/loader.py` 是否支持父子结构
 - [ ] 检查 `services/declarative_skills/executor.py` 的调用方式
 - [ ] 确认如何调用父skill的 assemble 函数
 
-### 4. 完善brick_strength子skill
+### 2. 完善brick_strength子skill
 ```bash
 # 复制concrete_strength作为模板
 cd subskills/brick_strength/
@@ -46,7 +41,7 @@ cd subskills/brick_strength/
 - 移除碳化深度字段
 - 规范: GB/T 50315-2011
 
-### 5. 完善mortar_strength子skill
+### 3. 完善mortar_strength子skill
 ```bash
 cd subskills/mortar_strength/
 # 创建：fields.yaml, render.md, impl/parse.py
@@ -60,7 +55,7 @@ cd subskills/mortar_strength/
 
 ## 🟡 中优先级（下周）
 
-### 6. 编写测试
+### 4. 编写测试
 ```
 tests/skills/generation/material_strength/
 ├── test_assemble.py           # 父skill编排逻辑
@@ -69,7 +64,7 @@ tests/skills/generation/material_strength/
 └── test_mortar_strength.py
 ```
 
-### 7. 更新README文档
+### 5. 更新README文档
 - [ ] 更新架构说明（父子结构图）
 - [ ] 添加使用示例
 - [ ] 添加"如何添加新材料"指南
@@ -78,15 +73,15 @@ tests/skills/generation/material_strength/
 
 ## 🟢 低优先级（后续）
 
-### 8. 集成测试
+### 6. 集成测试
 - [ ] 端到端测试：info_collection → generation
 - [ ] 与API路由集成测试
 
-### 9. 性能优化
+### 7. 性能优化
 - [ ] 子skill并行调用（如果可能）
 - [ ] 数据库查询优化
 
-### 10. 文档完善
+### 8. 文档完善
 - [ ] API文档
 - [ ] 架构图（Mermaid）
 

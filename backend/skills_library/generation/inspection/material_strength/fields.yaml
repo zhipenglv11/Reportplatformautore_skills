@@ -1,0 +1,162 @@
+# Material Strength - 父Skill字段契约
+# 父skill只管理子skills的编排，不直接处理字段映射
+
+skill: material_strength_description
+version: 2.0.0
+architecture: parent-child
+
+# ==================== 输入参数 ====================
+
+inputs:
+  project_id:
+    type: string
+    required: true
+    description: 项目ID
+  
+  node_id:
+    type: string
+    required: true
+    description: 节点ID
+  
+  context:
+    type: object
+    required: false
+    description: 上下文配置
+    properties:
+      material_order:
+        type: array
+        item_type: string
+        default: [concrete, brick, mortar]
+        description: 材料类型输出顺序
+      
+      include_overview:
+        type: boolean
+        default: false
+        description: 是否包含总述段落
+
+# ==================== 子skills注册 ====================
+
+subskills:
+  
+  concrete_strength:
+    path: ./subskills/concrete_strength
+    dataset_key: concrete_strength
+    query_condition: "test_item LIKE '%混凝土%'"
+    status: implemented
+    description: 混凝土强度检测描述
+  
+  brick_strength:
+    path: ./subskills/brick_strength
+    dataset_key: brick_strength
+    query_condition: "test_item LIKE '%砌体砖%' OR test_item LIKE '%砖强度%'"
+    status: framework_only
+    description: 砌体砖强度检测描述
+  
+  mortar_strength:
+    path: ./subskills/mortar_strength
+    dataset_key: mortar_strength
+    query_condition: "test_item LIKE '%砂浆%'"
+    status: framework_only
+    description: 砂浆强度检测描述
+
+# ==================== 输出结构 ====================
+
+outputs:
+  
+  has_data:
+    type: boolean
+    description: 是否有有效数据
+  
+  sections:
+    type: array
+    description: 各子skill的输出列表
+    item_structure:
+      material_type:
+        type: string
+        enum: [concrete, brick, mortar]
+      title:
+        type: string
+      content:
+        type: string
+        description: 子skill生成的描述文字
+      test_count:
+        type: integer
+      skill_used:
+        type: string
+      evidence_refs:
+        type: array
+  
+  assembled_content:
+    type: string
+    description: 组装后的完整章节内容
+  
+  summary:
+    type: object
+    computed: true
+    structure:
+      material_types:
+        type: array
+        description: 实际检测的材料类型列表
+      total_test_count:
+        type: integer
+        description: 所有材料的检测点总数
+  
+  evidence_refs:
+    type: array
+    description: 合并后的证据引用列表
+  
+  generation_metadata:
+    type: object
+    structure:
+      skill_name:
+        type: string
+        value: material_strength_description
+      skill_version:
+        type: string
+        value: "2.0.0"
+      subskills_called:
+        type: array
+        description: 实际调用的子skills列表
+      generated_at:
+        type: string
+        format: iso8601
+      section_count:
+        type: integer
+
+# ==================== 编排策略 ====================
+
+orchestration:
+  
+  execution_mode: sequential
+  description: 按顺序执行子skills
+  
+  failure_handling:
+    mode: continue
+    description: 某个子skill失败时继续执行其他
+    log_failures: true
+  
+  content_assembly:
+    separator: "\n\n"
+    description: 段落之间用双换行符分隔
+    include_transitions: false
+
+# ==================== 约束 ====================
+
+constraints:
+  
+  min_sections: 0
+  max_sections: 10
+  description: 允许无数据情况，最多支持10种材料类型
+  
+  no_data_message: "本次检测未对材料强度进行检测。"
+
+# ==================== 备注 ====================
+
+notes: |
+  父skill职责：
+  1. 检测哪些子skills有数据 (detect_available_materials)
+  2. 调用相应的子skills (call_subskill)
+  3. 组装输出内容 (assemble_content)
+  4. 合并证据引用 (merge_evidence_refs)
+  
+  所有字段定义在子skills的fields.yaml中。

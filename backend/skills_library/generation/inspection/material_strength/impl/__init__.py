@@ -1,7 +1,16 @@
 """
-Material Strength Skill - Implementation Module
+Material Strength - Parent Skill Implementation
+父skill实现模块
 """
 
-from .parse import parse_material_strength, validate_parsed_data
+from .assemble import (
+    assemble_material_strength,
+    detect_available_materials,
+    call_subskill
+)
 
-__all__ = ["parse_material_strength", "validate_parsed_data"]
+__all__ = [
+    "assemble_material_strength",
+    "detect_available_materials", 
+    "call_subskill"
+]
