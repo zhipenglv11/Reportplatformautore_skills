@@ -1,0 +1,193 @@
+# Concrete Strength - 字段契约定义
+# 专门针对混凝土强度检测的字段映射
+
+skill: concrete_strength
+version: 1.0.0
+parent_skill: material_strength_description
+
+# ==================== 核心字段 ====================
+
+fields:
+  
+  # 强度推定值
+  strength_value:
+    type: number
+    unit: MPa
+    precision: 1
+    required: true
+    source:
+      - path: confirmed_result.rebound_strength
+        priority: 1
+      - path: strength_estimated_mpa
+        priority: 2
+      - path: test_result
+        priority: 3
+    validation:
+      - type: range
+        min: 5.0
+        max: 100.0
+    aggregation:
+      method: average
+      round: 1
+  
+  # 强度等级
+  strength_grade:
+    type: string
+    required: false
+    source:
+      - path: confirmed_result.strength_grade
+        priority: 1
+      - path: design_strength_grade
+        priority: 2
+    validation:
+      - type: regex
+        pattern: "^C\\d+$"
+        example: "C25"
+  
+  # 检测方法
+  test_method:
+    type: enum
+    enum: [回弹法, 钻芯法, 超声回弹综合法]
+    required: false
+    default: 回弹法
+    source:
+      - path: confirmed_result.test_method
+        priority: 1
+  
+  # 碳化深度（混凝土特有）
+  carbonation_depth:
+    type: number
+    unit: mm
+    precision: 1
+    required: false
+    source:
+      - path: confirmed_result.carbonation_depth_avg
+        priority: 1
+      - path: carbonation_depth_avg_mm
+        priority: 2
+    validation:
+      - type: range
+        min: 0.0
+        max: 50.0
+    aggregation:
+      method: average
+      round: 1
+  
+  # 检测日期
+  test_date:
+    type: date
+    format: "%Y-%m-%d"
+    required: false
+    source:
+      - path: test_date
+        priority: 1
+  
+  # 检测部位
+  test_location:
+    type: string
+    required: false
+    source:
+      - path: test_location_text
+        priority: 1
+      - path: confirmed_result.test_position
+        priority: 2
+  
+  # 检测数量
+  test_count:
+    type: integer
+    required: true
+    source:
+      - path: _count  # 特殊标记：记录数
+    validation:
+      - type: min_value
+        value: 1
+  
+  # 强度范围
+  strength_range:
+    type: object
+    computed: true
+    computation:
+      type: min_max
+      source_field: strength_value
+    structure:
+      min:
+        type: number
+        unit: MPa
+        precision: 1
+      max:
+        type: number
+        unit: MPa
+        precision: 1
+
+# ==================== 证据链 ====================
+
+evidence:
+  evidence_refs:
+    type: array
+    required: true
+    source:
+      - path: evidence_refs
+    merge_strategy: union
+  
+  record_ids:
+    type: array
+    source:
+      - path: id
+
+# ==================== 规范依据 ====================
+
+code_reference:
+  type: list
+  item_type: string
+  default:
+    - JGJ/T 23-2011
+    - GB 50010-2010
+  computed: true
+  rules:
+    - condition: test_method == "回弹法"
+      value: ["JGJ/T 23-2011", "GB 50010-2010"]
+    - condition: test_method == "钻芯法"
+      value: ["CECS 03:2007", "GB 50010-2010"]
+    - condition: test_method == "超声回弹综合法"
+      value: ["CECS 02:2005", "GB 50010-2010"]
+
+# ==================== 数据获取 ====================
+
+data_retrieval:
+  query:
+    table: professional_data
+    filters:
+      - field: project_id
+        operator: eq
+        value: $input.project_id
+      - field: node_id
+        operator: eq
+        value: $input.node_id
+      - field: test_item
+        operator: like
+        value: "%混凝土%"
+      - field: confirmed_result
+        operator: is_not_null
+    order_by:
+      - field: test_date
+        direction: desc
+      - field: created_at
+        direction: desc
+
+# ==================== 验证规则 ====================
+
+validations:
+  - name: check_data_availability
+    condition: test_count >= 1
+    action: warning
+    error_message: 未找到有效的混凝土强度数据
+  
+  - name: check_strength_grade_consistency
+    condition: |
+      if strength_grade and avg_strength:
+        expected = extract_grade_value(strength_grade)  # C25 -> 25
+        deviation = abs(avg_strength - expected) / expected
+        return deviation < 0.3
+      return True
+    action: warning
+    error_message: 强度推定值与设计等级差异超过30%
