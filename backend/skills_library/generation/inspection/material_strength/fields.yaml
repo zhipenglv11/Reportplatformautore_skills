@@ -1,0 +1,349 @@
+# Material Strength Skill - 字段契约定义
+# 定义从 professional_data 到生成内容的字段映射规则
+
+skill: material_strength_description
+version: 1.0.0
+
+# ==================== 核心字段定义 ====================
+
+fields:
+  
+  # ---------- 材料类型 ----------
+  material_type:
+    type: enum
+    enum: [混凝土, 砌体砖, 砌块, 砂浆]
+    required: true
+    description: 检测材料类型
+    source:
+      # 优先级1：从confirmed_result获取
+      - dataset_key: concrete_strength
+        path: confirmed_result.material_type
+        priority: 1
+      - dataset_key: masonry_strength
+        path: confirmed_result.material_type
+        priority: 1
+      # 优先级2：从test_item推断
+      - dataset_key: concrete_strength
+        path: test_item
+        transform: extract_material_type  # 需要解析函数
+        priority: 2
+    validation:
+      - type: not_empty
+        message: 材料类型不能为空
+  
+  # ---------- 强度推定值 ----------
+  strength_value:
+    type: number
+    unit: MPa
+    precision: 1
+    required: true
+    description: 材料强度推定值
+    source:
+      # 优先级1：从confirmed_result的标准字段获取
+      - dataset_key: concrete_strength
+        path: confirmed_result.rebound_strength
+        priority: 1
+      - dataset_key: masonry_strength
+        path: confirmed_result.strength_estimated
+        priority: 1
+      # 优先级2：从表级字段获取
+      - dataset_key: concrete_strength
+        path: strength_estimated_mpa
+        priority: 2
+      - dataset_key: masonry_strength
+        path: strength_estimated_mpa
+        priority: 2
+    validation:
+      - type: range
+        min: 0
+        max: 100
+        message: 强度值应在0-100MPa之间
+    aggregation:
+      method: average  # 多个检测点取平均
+      round: 1         # 保留1位小数
+  
+  # ---------- 强度等级 ----------
+  strength_grade:
+    type: string
+    required: false
+    description: 设计强度等级（如C25、MU10）
+    source:
+      - dataset_key: concrete_strength
+        path: confirmed_result.strength_grade
+        priority: 1
+      - dataset_key: concrete_strength
+        path: design_strength_grade
+        priority: 2
+      - dataset_key: masonry_strength
+        path: confirmed_result.strength_grade
+        priority: 1
+    validation:
+      - type: regex
+        pattern: "^(C\\d+|MU\\d+|M\\d+\\.\\d+)$"
+        message: 强度等级格式不正确
+  
+  # ---------- 检测方法 ----------
+  test_method:
+    type: string
+    required: false
+    default: 回弹法
+    description: 检测方法
+    source:
+      - dataset_key: concrete_strength
+        path: confirmed_result.test_method
+        priority: 1
+      - dataset_key: masonry_strength
+        path: confirmed_result.test_method
+        priority: 1
+    allowed_values:
+      - 回弹法
+      - 钻芯法
+      - 超声回弹综合法
+      - 贯入法
+  
+  # ---------- 检测日期 ----------
+  test_date:
+    type: date
+    format: "%Y-%m-%d"
+    required: false
+    description: 检测日期
+    source:
+      - dataset_key: concrete_strength
+        path: test_date
+        priority: 1
+      - dataset_key: masonry_strength
+        path: test_date
+        priority: 1
+    validation:
+      - type: date_range
+        min: "2020-01-01"
+        max: "2030-12-31"
+  
+  # ---------- 检测部位 ----------
+  test_location:
+    type: string
+    required: false
+    description: 检测部位描述
+    source:
+      - dataset_key: concrete_strength
+        path: test_location_text
+        priority: 1
+      - dataset_key: masonry_strength
+        path: test_location_text
+        priority: 1
+      - dataset_key: concrete_strength
+        path: confirmed_result.test_position
+        priority: 2
+  
+  # ---------- 碳化深度（混凝土特有） ----------
+  carbonation_depth:
+    type: number
+    unit: mm
+    precision: 1
+    required: false
+    description: 混凝土碳化深度平均值
+    source:
+      - dataset_key: concrete_strength
+        path: confirmed_result.carbonation_depth_avg
+        priority: 1
+      - dataset_key: concrete_strength
+        path: carbonation_depth_avg_mm
+        priority: 2
+    aggregation:
+      method: average
+      round: 1
+  
+  # ---------- 检测数量 ----------
+  test_count:
+    type: integer
+    required: true
+    description: 检测构件或部位数量
+    source:
+      - dataset_key: concrete_strength
+        path: _count  # 特殊标记，表示记录数
+        priority: 1
+      - dataset_key: masonry_strength
+        path: _count
+        priority: 1
+    validation:
+      - type: min_value
+        value: 1
+        message: 检测数量至少为1
+  
+  # ---------- 强度范围 ----------
+  strength_range:
+    type: object
+    required: false
+    description: 强度值的最小值和最大值
+    computed: true
+    computation:
+      type: min_max
+      source_field: strength_value
+    structure:
+      min:
+        type: number
+        unit: MPa
+        precision: 1
+      max:
+        type: number
+        unit: MPa
+        precision: 1
+  
+  # ---------- 规范依据 ----------
+  code_reference:
+    type: list
+    item_type: string
+    required: false
+    description: 检测依据的技术规范
+    default:
+      - JGJ/T 23-2011
+      - GB 50010-2010
+    source:
+      - dataset_key: concrete_strength
+        path: confirmed_result.standards
+        priority: 1
+      # 根据material_type自动选择规范
+      - computed: true
+        rules:
+          - condition: material_type == "混凝土"
+            value: ["JGJ/T 23-2011", "GB 50010-2010"]
+          - condition: material_type == "砌体砖" or material_type == "砌块"
+            value: ["GB/T 50315-2011", "GB 50003-2011"]
+          - condition: material_type == "砂浆"
+            value: ["JGJ/T 70-2009"]
+
+# ==================== 证据链字段 ====================
+
+evidence:
+  evidence_refs:
+    type: array
+    required: true
+    description: 证据引用列表
+    source:
+      - dataset_key: concrete_strength
+        path: evidence_refs
+      - dataset_key: masonry_strength
+        path: evidence_refs
+    merge_strategy: union  # 合并所有证据
+  
+  record_ids:
+    type: array
+    item_type: string
+    description: 关联的professional_data记录ID
+    source:
+      - dataset_key: concrete_strength
+        path: id
+      - dataset_key: masonry_strength
+        path: id
+
+# ==================== 汇总统计字段 ====================
+
+summary:
+  total_count:
+    type: integer
+    computed: true
+    description: 总检测数量
+    computation:
+      type: sum
+      fields: [test_count]
+  
+  material_types:
+    type: array
+    item_type: string
+    computed: true
+    description: 检测的材料类型列表
+    computation:
+      type: unique
+      source_field: material_type
+  
+  avg_strength:
+    type: number
+    unit: MPa
+    precision: 1
+    computed: true
+    description: 平均强度值
+    computation:
+      type: average
+      source_field: strength_value
+  
+  compliance_rate:
+    type: number
+    unit: "%"
+    precision: 1
+    required: false
+    computed: true
+    description: 符合设计要求的比例（如果有设计强度等级）
+    computation:
+      type: custom
+      function: calculate_compliance_rate
+
+# ==================== 数据获取策略 ====================
+
+data_retrieval:
+  query:
+    table: professional_data
+    filters:
+      - field: project_id
+        operator: eq
+        value: $input.project_id
+      - field: node_id
+        operator: eq
+        value: $input.node_id
+      - field: test_item
+        operator: in
+        value: 
+          - 混凝土抗压强度
+          - 砌体砖强度
+          - 砌块强度
+          - 砂浆强度
+    order_by:
+      - field: test_date
+        direction: desc
+      - field: created_at
+        direction: desc
+  
+  grouping:
+    by: material_type
+    aggregations:
+      - field: strength_value
+        method: average
+        output: avg_strength_by_type
+      - field: test_count
+        method: sum
+        output: total_count_by_type
+
+# ==================== 验证规则 ====================
+
+validations:
+  - name: check_data_availability
+    type: required
+    condition: test_count >= 1
+    error_message: 未找到有效的材料强度检测数据
+    action: warning  # 只警告，不中断
+  
+  - name: check_strength_consistency
+    type: business_logic
+    condition: |
+      if strength_grade is not None:
+        expected_strength = extract_strength_from_grade(strength_grade)
+        return abs(strength_value - expected_strength) / expected_strength < 0.3
+      return True
+    error_message: 强度推定值与设计等级差异超过30%
+    action: warning
+  
+  - name: check_carbonation_reasonable
+    type: business_logic
+    condition: |
+      if carbonation_depth is not None:
+        return 0 <= carbonation_depth <= 50
+      return True
+    error_message: 碳化深度值异常
+    action: warning
+
+# ==================== 输出配置 ====================
+
+output:
+  format: structured
+  include_metadata: true
+  include_evidence: true
+  include_summary: true
