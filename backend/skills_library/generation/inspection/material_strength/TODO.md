@@ -19,40 +19,30 @@
   - [x] fields.yaml → v2.0 父skill版本
   - [x] render.md → 父skill段落组装规则
   - [x] impl/__init__.py → 导出 assemble 函数
+- [x] 系统集成检查（集成测试通过）
+- [x] 完善brick_strength子skill（完整实现）
+  - [x] fields.yaml, render.md, impl/parse.py, impl/__init__.py
+- [x] 完善mortar_strength子skill（完整实现）
+  - [x] fields.yaml, render.md, impl/parse.py, impl/__init__.py
 
 ---
 
 ## 🔴 高优先级（本周必做）
 
-### 1. 系统集成检查
-- [ ] 检查 `services/declarative_skills/loader.py` 是否支持父子结构
-- [ ] 检查 `services/declarative_skills/executor.py` 的调用方式
-- [ ] 确认如何调用父skill的 assemble 函数
-
-### 2. 完善brick_strength子skill
+### 1. Git提交和推送
+### 1. Git提交和推送
 ```bash
-# 复制concrete_strength作为模板
-cd subskills/brick_strength/
-# 创建：fields.yaml, render.md, impl/parse.py
-```
-**关键修改点**：
-- Query: `test_item LIKE '%砌体砖%'`
-- 强度等级: `MU\d+`（而非 C\d+）
-- 移除碳化深度字段
-- 规范: GB/T 50315-2011
+git add .
+git commit -m "feat: complete brick and mortar subskills"
+git push origin feature/generation-skills
+### 2. 编写端到端测试（带数据库）
+- [ ] 创建测试数据库或使用测试fixture
+- [ ] 测试父skill调用concrete_strength
+- [ ] 测试父skill调用brick_strength
+- [ ] 测试父skill调用mortar_strength
+- [ ] 测试多材料混合场景
 
-### 3. 完善mortar_strength子skill
-```bash
-cd subskills/mortar_strength/
-# 创建：fields.yaml, render.md, impl/parse.py
-```
-**关键修改点**：
-- Query: `test_item LIKE '%砂浆%'`
-- 强度等级: `M\d+\.\d+`（如M5.0）
-- 规范: JGJ/T 70-2009
-
----
-
+### 3. 集成到API路由
 ## 🟡 中优先级（下周）
 
 ### 4. 编写测试

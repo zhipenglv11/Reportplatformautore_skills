@@ -1,0 +1,193 @@
+# Mortar Strength - 字段契约定义
+# 专门针对砂浆强度检测的字段映射
+
+skill: mortar_strength
+version: 1.0.0
+parent_skill: material_strength_description
+
+# ==================== 核心字段 ====================
+
+fields:
+  
+  # 强度推定值
+  strength_value:
+    type: number
+    unit: MPa
+    precision: 1
+    required: true
+    source:
+      - path: confirmed_result.rebound_strength
+        priority: 1
+      - path: strength_estimated_mpa
+        priority: 2
+      - path: test_result
+        priority: 3
+    validation:
+      - type: range
+        min: 1.0
+        max: 30.0
+    aggregation:
+      method: average
+      round: 1
+  
+  # 强度等级（砂浆用M等级，如M5.0）
+  strength_grade:
+    type: string
+    required: false
+    source:
+      - path: confirmed_result.strength_grade
+        priority: 1
+      - path: design_strength_grade
+        priority: 2
+    validation:
+      - type: regex
+        pattern: "^M\\d+(\\.\\d+)?$"
+        example: "M5.0"
+  
+  # 检测方法
+  test_method:
+    type: enum
+    enum: [回弹法, 贯入法, 筒压法]
+    default: 回弹法
+    source:
+      - path: test_method
+        priority: 1
+      - path: confirmed_result.test_method
+        priority: 2
+  
+  # 检测数量（砂浆用"测点"而非"构件"）
+  test_count:
+    type: integer
+    required: true
+    source:
+      - path: total_count
+        aggregation: count
+    validation:
+      - type: range
+        min: 1
+        max: 1000
+
+# ==================== 统计字段 ====================
+
+computed_fields:
+  
+  # 强度范围
+  strength_range:
+    type: object
+    structure:
+      min:
+        type: number
+        source: strength_value
+        aggregation: min
+      max:
+        type: number
+        source: strength_value
+        aggregation: max
+  
+  # 平均强度
+  avg_strength:
+    type: number
+    source: strength_value
+    aggregation: average
+    precision: 1
+
+# ==================== 元数据字段 ====================
+
+metadata_fields:
+  
+  # 检测日期
+  test_date:
+    type: date
+    source:
+      - path: test_date
+        priority: 1
+      - path: confirmed_result.test_date
+        priority: 2
+  
+  # 检测位置
+  test_location:
+    type: string
+    source:
+      - path: location
+        priority: 1
+      - path: component_location
+        priority: 2
+  
+  # 规范依据
+  code_reference:
+    type: array
+    item_type: string
+    default: [JGJ/T 70-2009]
+    source:
+      - path: code_reference
+        priority: 1
+    description: 砂浆强度检测依据的规范
+
+# ==================== 证据引用 ====================
+
+evidence_refs:
+  type: array
+  structure:
+    record_id:
+      type: string
+      source: record_id
+    table_name:
+      type: string
+      value: professional_data
+    field_path:
+      type: string
+      value: confirmed_result.rebound_strength
+    evidence_type:
+      type: enum
+      enum: [test_data, calculation_result]
+      default: test_data
+
+# ==================== 数据约束 ====================
+
+constraints:
+  
+  # 必须有有效的强度值
+  required_fields: [strength_value, test_count, test_method]
+  
+  # 数据质量要求
+  quality_rules:
+    - name: min_test_count
+      condition: test_count >= 1
+      severity: error
+      message: 至少需要1个测点的数据
+    
+    - name: strength_reasonable_range
+      condition: avg_strength >= 1.0 and avg_strength <= 30.0
+      severity: warning
+      message: 砂浆强度推定值超出常见范围(1~30MPa)
+    
+    - name: strength_grade_match
+      condition: |
+        if strength_grade:
+          grade_num = float(strength_grade.replace('M', ''))
+          avg_strength >= grade_num * 0.7  # 允许70%容差
+      severity: warning
+      message: 强度推定值与强度等级不匹配
+
+# ==================== 查询条件 ====================
+
+query_conditions:
+  
+  # 从professional_data表查询砂浆数据
+  professional_data:
+    table: professional_data
+    where:
+      - field: test_item
+        operator: LIKE
+        value: "%砂浆%"
+    order_by: test_date DESC
+
+# ==================== 备注 ====================
+
+notes: |
+  砂浆强度与混凝土/砌体砖的关键区别：
+  1. 强度等级格式：M5.0（带小数点）
+  2. 单位术语：测点（而非构件或部位）
+  3. 强度范围：1~30 MPa（低于混凝土和砌体砖）
+  4. 无碳化深度字段
+  5. 规范依据：JGJ/T 70-2009
