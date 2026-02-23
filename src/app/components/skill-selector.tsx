@@ -29,6 +29,7 @@ interface SkillSelectorProps {
   selectedSkill?: string;
   showOnlyDeclarative?: boolean;
   groupFilter?: string;
+  allowedSkills?: string[];
   className?: string;
 }
 
@@ -37,6 +38,7 @@ export default function SkillSelector({
   selectedSkill,
   showOnlyDeclarative = true,
   groupFilter,
+  allowedSkills,
   className = '',
 }: SkillSelectorProps) {
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
@@ -114,9 +116,13 @@ export default function SkillSelector({
   }, []);
 
   const availableSkills = showOnlyDeclarative ? skills.declarative : [...skills.imperative, ...skills.declarative];
-  const filteredSkills = groupFilter
+  let filteredSkills = groupFilter
     ? availableSkills.filter((skillName) => skillDetails[skillName]?.group === groupFilter)
     : availableSkills;
+  if (Array.isArray(allowedSkills) && allowedSkills.length > 0) {
+    const allow = new Set(allowedSkills);
+    filteredSkills = filteredSkills.filter((skillName) => allow.has(skillName));
+  }
 
   const handleSkillChange = (skillName: string) => {
     const skillType = skills.declarative.includes(skillName) ? 'declarative' : 'imperative';

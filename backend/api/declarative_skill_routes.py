@@ -309,6 +309,9 @@ def _build_payload(
     record_fingerprint = hashlib.sha256(
         json.dumps(
             {
+                "project_id": project_id,
+                "node_id": node_id,
+                "skill_name": skill_name,
                 "source_hash": source_hash,
                 "table_type": table_type,
                 "index": record_index,

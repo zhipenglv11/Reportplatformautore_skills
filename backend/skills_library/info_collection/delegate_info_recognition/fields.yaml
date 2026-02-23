@@ -1,67 +1,112 @@
-# Delegate Info Check Fields
-# ???????????
+# Delegate Info Recognition Fields
+# 委托信息识别字段定义
 
 meta_fields:
   - name: control_id
-    chinese_name: ????
+    chinese_name: 控制编号
     type: string
     required: true
-    description: ??????
+    location: 左上角或指定位置
+    description: 表格的控制编号/ID
     example: KJQR-056-2047
+    notes: 用于识别表格类型
 
   - name: record_no
-    chinese_name: ??????
+    chinese_name: 原始记录编号
     type: string
     required: true
-    description: ???????No:xxxxx?
+    location: 右上角 No:xxxxx
+    description: 原始记录编号，格式为No:xxxxx
     example: "No:2500063"
+    notes: 保留完整格式，包括"No:"
 
   - name: client_org
-    chinese_name: ????
+    chinese_name: 委托单位
     type: string
     required: true
-    description: ??????
+    description: 委托检测的单位或组织名称
+    example: "昆山高新技术产业开发区青阳城市管理办事处"
+    notes: 完整提取单位名称
 
   - name: inspection_reason
-    chinese_name: ????
+    chinese_name: 检测原因
     type: string
     required: false
-    description: ????/??????
+    description: 检测或鉴定的原因/事项
+    example: "危险性鉴定"
+    notes: 从"委托鉴定事项"或"检测原因"字段提取
 
   - name: inspection_basis
-    chinese_name: ????
+    chinese_name: 检测依据
     type: string
     required: false
-    description: ????/??
+    description: 检测依据的标准或规范
+    example: "JGJ125-2016"
+    notes: 提取标准编号
 
   - name: instrument_id
-    chinese_name: ????
+    chinese_name: 仪器编号
     type: string
     required: false
-    description: ????/??????
+    description: 检测使用的仪器编号或设备编号
+    example: "MLG01-01"
+    notes: 根据实际情况提取
 
   - name: inspection_date
-    chinese_name: ????
-    type: string
+    chinese_name: 检测日期
+    type: date
     required: false
-    description: ?????YYYY-MM-DD???
+    description: 进行检测的日期或查勘日期
+    example: "2025-02-11"
+    format: YYYY-MM-DD(无法规范化则保留原字符串)
+    notes: 优先提取标准格式，禁止推断补全
 
   - name: house_name
-    chinese_name: ????
+    chinese_name: 房屋名称
     type: string
     required: false
-    description: ????
+    description: 房屋或建筑的名称/编号
+    example: "建材新村5号楼"
+    notes: 从"鉴定对象"或"房屋名称"字段提取
 
+# 房屋详情字段
+house_details_field:
   - name: house_details
-    chinese_name: ??????
+    chinese_name: 房屋详情
     type: string
     required: false
-    description: ??????/????
+    description: |
+      房屋的详细信息描述，主要来自"房屋概况"部分，应包括但不限于：
+      - 房屋位置/地址
+      - 建成年份及使用情况
+      - 建筑面积
+      - 结构类型（砌体结构、框架结构等）
+      - 楼层数
+      - 主要构件及材料（楼板、墙体、砂浆等）
+      - 其他重要信息
+    example: |
+      鉴定对象位于昆山市开发区朝阳路以南、昆塔路以东建材新村小区内，
+      建成后作为住宅楼使用至今。据委托方提供资料，鉴定对象约建于1987年，
+      建筑面积1672㎡，为四层砌体结构，楼、屋面均采用预应力混凝土空心板，
+      现浇混凝土楼梯，竖向承重构件为烧结粘土砖实墙，混合砂浆砌筑。
+    notes: |
+      将"房屋概况"部分的内容整合为连贯的段落文字
+      不要遗漏关键信息，保持原文准确性
 
+# 数据格式规范
 format_rules:
   date:
-    - ??YYYY-MM-DD??
-    - ????????????
+    - 优先输出 YYYY-MM-DD 格式
+    - 若无法可靠规范化(手写模糊/缺日月),则保留原字符串
+    - 禁止推断补全
+
   string:
-    - ?????
-    - ?????????
+    - 类型:string | null
+    - 轻量清洗:去首尾空格、把连续空格压成1个
+    - 保留原文语义，不改写
+
+  house_details:
+    - 类型:string | null
+    - 整合"房屋概况"所有信息为连贯段落
+    - 完整保留关键信息：位置、年份、面积、结构、材料等
+    - 不要使用列表格式，而是自然的段落描述

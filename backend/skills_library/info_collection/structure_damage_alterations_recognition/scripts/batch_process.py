@@ -6,10 +6,10 @@ Batch Processing
 import json
 from pathlib import Path
 from typing import List, Optional, Dict, Any
-from .config import Config
-from .qwen_client import QwenClient
-from .pdf_processor import PDFProcessor
-from .formatter import Formatter
+from scripts.config import Config
+from scripts.qwen_client import QwenClient
+from scripts.pdf_processor import PDFProcessor
+from scripts.formatter import Formatter
 from skills.extractor import StructureAlterationExtractor
 from skills.schema import StructureAlterationSchema
 

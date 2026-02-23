@@ -555,7 +555,15 @@ export default function NodeSidebar({
             const hasNodeOnCanvas = nodes?.some((n) => n.type === node.type) || false;
             
             // Only enable specific skills as requested
-            const enabledSkills = ["委托方资料", "砂浆强度", "混凝土强度", "砖强度", "现场情况检查", "多文档智能上传"];
+            const enabledSkills = [
+              "委托方资料",
+              "砂浆强度",
+              "混凝土强度",
+              "砖强度",
+              "现场情况检查",
+              "多文档智能上传",
+              "软件计算结果",
+            ];
             const isEnabled = enabledSkills.includes(node.label);
 
             return (

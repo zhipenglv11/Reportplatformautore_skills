@@ -32,8 +32,15 @@ async def parse_concrete_strength(
     if not records:
         logger.info(f"Project {project_id}, Node {node_id}: 未找到混凝土强度数据")
         return {
-            "has_data": False,
-            "material_type": "concrete"
+            "dataset_key": "concrete_strength",
+            "content": "",
+            "table": {"columns": [], "rows": []},
+            "meta": {
+                "source": "legacy_merge",
+                "material_type": "concrete",
+                "has_data": False,
+                "warnings": ["未找到混凝土强度数据"]
+            }
         }
     
     # 2. 提取字段数据
@@ -44,31 +51,32 @@ async def parse_concrete_strength(
     if validation["warnings"]:
         logger.warning(f"混凝土数据验证警告: {validation['warnings']}")
     
-    # 4. 生成描述文字
-    content = _generate_content(parsed_data)
+    # 4. 生成描述文字（段落文本）
+    content_text = _generate_content_text(parsed_data, context or {})
     
-    # 5. 返回结构化结果
+    # 5. 返回统一格式：dataset_key + content + table + meta
     return {
-        "has_data": True,
-        "material_type": "concrete",
-        "title": "混凝土强度",
-        "content": content,
-        "test_count": parsed_data["test_count"],
-        "test_method": parsed_data["test_method"],
-        "avg_strength": parsed_data["avg_strength"],
-        "strength_range": parsed_data.get("strength_range"),
-        "strength_grade": parsed_data.get("strength_grade"),
-        "carbonation_depth": parsed_data.get("carbonation_depth"),
-        "strength_unit": "MPa",
-        "evidence_refs": parsed_data["evidence_refs"],
-        "record_ids": parsed_data["record_ids"],
-        "generation_metadata": {
-            "skill_name": "concrete_strength",
+        "dataset_key": "concrete_strength",
+        "content": content_text,
+        "table": parsed_data["table"],
+        "meta": {
+            "source": "legacy_merge",
+            "material_type": "concrete",
+            "title": "混凝土强度",
+            "test_count": parsed_data["test_count"],
+            "test_method": parsed_data["test_method"],
+            "avg_strength": parsed_data["avg_strength"],
+            "strength_range": parsed_data.get("strength_range"),
+            "strength_grade": parsed_data.get("strength_grade"),
+            "carbonation_depth": parsed_data.get("carbonation_depth"),
+            "strength_unit": "MPa",
+            "evidence_refs": parsed_data["evidence_refs"],
+            "record_ids": parsed_data["record_ids"],
+            "summary": parsed_data["summary"],
+            "warnings": validation["warnings"],
             "skill_version": "1.0.0",
             "generated_at": datetime.utcnow().isoformat(),
-            "record_count": len(records),
-            "test_methods_used": [parsed_data["test_method"]],
-            "warnings": validation["warnings"]
+            "record_count": len(records)
         }
     }
 
@@ -92,16 +100,20 @@ async def _fetch_concrete_data(project_id: str, node_id: str) -> List[Dict[str, 
                         carbonation_depth_avg_mm,
                         test_date,
                         test_location_text,
+                        raw_result,
                         confirmed_result,
                         evidence_refs
                     FROM professional_data
                     WHERE project_id = :pid
-                    AND node_id = :nid
-                    AND test_item LIKE '%混凝土%'
-                    AND confirmed_result IS NOT NULL
+                    AND (
+                        test_item LIKE '%混凝土%'
+                        OR test_item = 'concrete_table_recognition'
+                        OR test_item = 'concrete_strength'
+                    )
+                    AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
                     ORDER BY test_date DESC, created_at DESC
                 """),
-                {"pid": project_id, "nid": node_id}
+                {"pid": project_id}
             )
             
             records = []
@@ -112,6 +124,12 @@ async def _fetch_concrete_data(project_id: str, node_id: str) -> List[Dict[str, 
                     import json
                     try:
                         record["confirmed_result"] = json.loads(record["confirmed_result"])
+                    except Exception:
+                        pass
+                if isinstance(record.get("raw_result"), str):
+                    import json
+                    try:
+                        record["raw_result"] = json.loads(record["raw_result"])
                     except Exception:
                         pass
                 if isinstance(record.get("evidence_refs"), str):
@@ -130,38 +148,40 @@ async def _fetch_concrete_data(project_id: str, node_id: str) -> List[Dict[str, 
 
 
 def _extract_fields(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """按fields.yaml定义提取字段"""
-    # 提取强度值
+    """???????"""
+    table = _build_table(records)
     strength_values = []
-    for record in records:
-        strength = _extract_strength_value(record)
-        if strength is not None:
-            strength_values.append(strength)
-    
+    for row in table.get("rows", []):
+        val = _parse_number(row[3])
+        if val is not None:
+            strength_values.append(val)
+
     if not strength_values:
-        raise ValueError("未找到有效的强度值")
-    
-    # 计算统计值
+        for record in records:
+            strength = _extract_strength_value(record)
+            if strength is not None:
+                strength_values.append(strength)
+
+    if not strength_values:
+        raise ValueError("?????????")
+
     avg_strength = round(sum(strength_values) / len(strength_values), 1)
     strength_range = {
         "min": round(min(strength_values), 1),
         "max": round(max(strength_values), 1)
     } if len(strength_values) > 1 else None
-    
-    # 提取其他字段（从第一条记录）
+
     first_record = records[0]
-    confirmed = first_record.get("confirmed_result", {}) or {}
-    
-    # 碳化深度
-    carbonation_depths = []
-    for record in records:
-        depth = _extract_carbonation_depth(record)
-        if depth is not None:
-            carbonation_depths.append(depth)
-    
-    avg_carbonation = round(sum(carbonation_depths) / len(carbonation_depths), 1) if carbonation_depths else None
-    
-    # 收集证据
+
+    # ???????
+    carbonation_values = []
+    for row in table.get("rows", []):
+        val = _parse_number(row[4])
+        if val is not None:
+            carbonation_values.append(val)
+    avg_carbonation = round(sum(carbonation_values) / len(carbonation_values), 1) if carbonation_values else _extract_carbonation_depth(first_record)
+
+    # ?????
     all_evidence_refs = []
     record_ids = []
     for record in records:
@@ -169,9 +189,13 @@ def _extract_fields(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         if isinstance(refs, list):
             all_evidence_refs.extend(refs)
         record_ids.append(record.get("id"))
-    
+
+    age_days = _extract_age_days_from_record(first_record)
+    age_correction_factor = _extract_age_correction_factor_from_record(first_record)
+    summary = _build_summary(table)
+
     return {
-        "test_count": len(records),
+        "test_count": len(table.get("rows", [])) if table.get("rows") else len(records),
         "avg_strength": avg_strength,
         "strength_range": strength_range,
         "strength_grade": _extract_strength_grade(first_record),
@@ -180,15 +204,18 @@ def _extract_fields(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         "test_date": first_record.get("test_date"),
         "evidence_refs": _deduplicate_refs(all_evidence_refs),
         "record_ids": record_ids,
-        "code_reference": _determine_code_reference(_extract_test_method(first_record))
+        "code_reference": _determine_code_reference(_extract_test_method(first_record)),
+        "age_days": age_days,
+        "age_correction_factor": age_correction_factor,
+        "table": table,
+        "summary": summary
     }
 
 
 def _extract_strength_value(record: Dict[str, Any]) -> Optional[float]:
-    """提取强度值 - 按优先级"""
+    """????? - ????"""
     confirmed = record.get("confirmed_result", {}) or {}
-    
-    # 优先级1
+
     if isinstance(confirmed, dict):
         strength = confirmed.get("rebound_strength") or confirmed.get("strength_estimated")
         if strength is not None:
@@ -196,50 +223,73 @@ def _extract_strength_value(record: Dict[str, Any]) -> Optional[float]:
                 return float(strength)
             except (ValueError, TypeError):
                 pass
-    
-    # 优先级2
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        for key in ["混凝土强度推定值(MPa)", "混凝土强度推定值（MPa）", "混凝土强度推定值", "strength_estimated", "strength_estimated_mpa"]:
+            if key in raw and raw.get(key) is not None:
+                try:
+                    return float(raw.get(key))
+                except (ValueError, TypeError):
+                    pass
+
     strength = record.get("strength_estimated_mpa")
     if strength is not None:
         try:
             return float(strength)
         except (ValueError, TypeError):
             pass
-    
-    # 优先级3
+
     strength = record.get("test_result")
     if strength is not None:
         try:
             return float(strength)
         except (ValueError, TypeError):
             pass
-    
+
     return None
 
 
 def _extract_strength_grade(record: Dict[str, Any]) -> Optional[str]:
-    """提取强度等级"""
+    """??????"""
     confirmed = record.get("confirmed_result", {}) or {}
     if isinstance(confirmed, dict):
-        grade = confirmed.get("strength_grade")
+        grade = confirmed.get("strength_grade") or confirmed.get("design_strength_grade")
         if grade:
             return str(grade)
-    
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        grade = raw.get("design_strength_grade") or raw.get("??????")
+        if grade:
+            return str(grade)
+
     grade = record.get("design_strength_grade")
     return str(grade) if grade else None
 
 
 def _extract_test_method(record: Dict[str, Any]) -> str:
-    """提取检测方法"""
+    """??????"""
     confirmed = record.get("confirmed_result", {}) or {}
     if isinstance(confirmed, dict):
         method = confirmed.get("test_method")
         if method:
             return str(method)
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        method = raw.get("test_method") or raw.get("检测方法")
+        if method:
+            return str(method)
+
+    test_item = record.get("test_item") or ""
+    if "回弹" in str(test_item):
+        return "回弹法"
     return "回弹法"
 
 
 def _extract_carbonation_depth(record: Dict[str, Any]) -> Optional[float]:
-    """提取碳化深度"""
+    """??????"""
     confirmed = record.get("confirmed_result", {}) or {}
     if isinstance(confirmed, dict):
         depth = confirmed.get("carbonation_depth_avg")
@@ -248,14 +298,23 @@ def _extract_carbonation_depth(record: Dict[str, Any]) -> Optional[float]:
                 return float(depth)
             except (ValueError, TypeError):
                 pass
-    
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        for key in ["碳化深度(mm)", "碳化深度（mm）", "carbonation_depth_avg"]:
+            if key in raw and raw.get(key) is not None:
+                try:
+                    return float(raw.get(key))
+                except (ValueError, TypeError):
+                    pass
+
     depth = record.get("carbonation_depth_avg_mm")
     if depth is not None:
         try:
             return float(depth)
         except (ValueError, TypeError):
             pass
-    
+
     return None
 
 
@@ -297,41 +356,349 @@ def _validate_data(data: Dict[str, Any]) -> Dict[str, List[str]]:
     return {"warnings": warnings}
 
 
-def _generate_content(data: Dict[str, Any]) -> str:
-    """根据render.md规范生成描述文字"""
+def _generate_content_text(data: Dict[str, Any], context: Dict[str, Any]) -> str:
+    """生成混凝土强度检测的段落文本（合并旧系统描述逻辑）"""
+    code_reference = context.get("code_reference") or "GB50292-2015 附录K"
+    test_method = data.get("test_method") or "回弹法"
+    test_count = data.get("test_count", 0)
+    age_days = _extract_age_days(data)
+    carbonation_avg = data.get("carbonation_depth")
+    age_correction_factor = _extract_age_correction_factor(data)
+    min_strength = data.get("summary", {}).get("min_strength")
+    design_grade = data.get("strength_grade") or ""
+    meets_design = data.get("summary", {}).get("meets_design")
+    
+    # 段落1：概述
     paragraphs = []
+    paragraphs.append(
+        f"本次检测采用{test_method}对混凝土抗压强度进行检测，共检测{test_count}处构件。"
+    )
     
-    # 第1段：检测概述
-    overview = f"采用{data['test_method']}对现场混凝土强度进行检测，共检测{data['test_count']}个构件。"
-    paragraphs.append(overview)
+    # 段落2：龄期与碳化深度
+    age_text = ""
+    if age_days is not None:
+        if age_days >= 1000:
+            age_text = f"混凝土龄期为{age_days}天，已超过1000天，"
+            if age_correction_factor:
+                age_text += f"依据{code_reference}进行了龄期修正（修正系数{age_correction_factor}）。"
+            else:
+                age_text += f"依据{code_reference}进行了龄期修正。"
+        else:
+            age_text = f"混凝土龄期为{age_days}天。"
     
-    # 第2段：检测结果
-    strength_grade = data.get("strength_grade")
-    carbonation = data.get("carbonation_depth")
-    strength_range = data.get("strength_range")
+    carbonation_text = ""
+    if carbonation_avg is not None:
+        if carbonation_avg >= 6.0:
+            carbonation_text = f"碳化深度平均值为{carbonation_avg}mm，已超过6mm，依据{code_reference}进行了碳化深度修正。"
+        else:
+            carbonation_text = f"碳化深度平均值为{carbonation_avg}mm。"
     
-    if strength_grade and carbonation:
-        result = f"检测结果表明，混凝土强度推定值在{strength_range['min']}~{strength_range['max']}MPa之间，" \
-                 f"平均值为{data['avg_strength']}MPa，设计强度等级为{strength_grade}。" \
-                 f"碳化深度平均值为{carbonation}mm。"
-    elif strength_grade:
-        result = f"检测结果表明，混凝土强度推定值为{data['avg_strength']}MPa，设计强度等级为{strength_grade}。"
-    elif strength_range:
-        result = f"混凝土强度检测结果显示，各检测构件强度推定值在{strength_range['min']}~{strength_range['max']}MPa之间，" \
-                 f"平均值为{data['avg_strength']}MPa。"
-    else:
-        result = f"混凝土强度检测结果为{data['avg_strength']}MPa。"
+    if age_text or carbonation_text:
+        paragraphs.append(age_text + carbonation_text)
     
-    paragraphs.append(result)
+    # 段落3：结果总结
+    if min_strength is not None:
+        result_text = f"检测结果显示，混凝土抗压强度推定值最小值为{min_strength}MPa"
+        if design_grade:
+            result_text += f"，设计强度等级为{design_grade}"
+        if meets_design is not None:
+            result_text += f"，{'符合' if meets_design else '不符合'}设计要求。"
+        else:
+            result_text += "。"
+        paragraphs.append(result_text)
     
-    # 第3段：规范依据
-    code_list = "、".join(data["code_reference"])
-    code_ref = f"相关检测及结果判定依据{code_list}执行。"
-    paragraphs.append(code_ref)
+    # 段落4：表格引用
+    paragraphs.append(f"详见表《构件的混凝土抗压强度及碳化深度抽测结果（{test_method}）》。")
     
-    return "".join(paragraphs)
+    return "\n\n".join(paragraphs)
 
 
+def _build_table(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """?????????"""
+    columns = [
+        "序号",
+        "抽测部位",
+        "抗压强度设计值",
+        "龄期修正后混凝土抗压强度推定值(MPa)",
+        "碳化深度平均值(mm)",
+        "抽测结果评价"
+    ]
+    raw_rows = []
+
+    for record in records:
+        confirmed = record.get("confirmed_result", {}) or {}
+        extracted_rows = _extract_raw_rows(record)
+        if extracted_rows:
+            for raw in extracted_rows:
+                location = _get_value(raw, ["检测部位", "test_location", "抽测部位"]) or _extract_location(record, confirmed)
+                design_grade = _get_value(raw, ["设计强度等级", "design_strength_grade"]) or _extract_design_grade(record, confirmed)
+                strength_estimated = _get_value(raw, ["混凝土强度推定值(MPa)", "混凝土强度推定值（MPa）", "混凝土强度推定值", "strength_estimated", "strength_estimated_mpa"])
+                carbonation_avg = _get_value(raw, ["碳化深度(mm)", "碳化深度（mm）", "carbonation_depth_avg"])                     or _extract_carbonation_avg(record, confirmed)
+
+                evaluation = _evaluate_strength(_parse_number(strength_estimated), design_grade)
+
+                raw_rows.append([
+                    location,
+                    design_grade,
+                    _format_number(_parse_number(strength_estimated)),
+                    _format_number(_parse_number(carbonation_avg)),
+                    evaluation
+                ])
+        else:
+            location = _extract_location(record, confirmed)
+            design_grade = _extract_design_grade(record, confirmed)
+            strength_estimated = _extract_strength_estimated(record, confirmed)
+            carbonation_avg = _extract_carbonation_avg(record, confirmed)
+            evaluation = _evaluate_strength(strength_estimated, design_grade)
+
+            raw_rows.append([
+                location,
+                design_grade,
+                _format_number(strength_estimated),
+                _format_number(carbonation_avg),
+                evaluation
+            ])
+
+    rows = []
+    for idx, row in enumerate(raw_rows, start=1):
+        rows.append([idx] + row)
+
+    return {"columns": columns, "rows": rows}
+
+
+def _extract_raw_rows(record: Dict[str, Any]) -> List[Dict[str, Any]]:
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        rows = raw.get("rows")
+        if isinstance(rows, list):
+            return [r for r in rows if isinstance(r, dict)]
+        # ???????raw_result??????
+        return [raw]
+    return []
+
+
+def _get_value(data: Dict[str, Any], keys: List[str]) -> Any:
+    for key in keys:
+        if key in data and data.get(key) is not None:
+            return data.get(key)
+    return None
+
+
+def _build_summary(table: Dict[str, Any]) -> Dict[str, Any]:
+    """????????????????"""
+    strengths = []
+    meets_design_flags = []
+
+    for row in table.get("rows", []):
+        strength_val = _parse_number(row[3])
+        if strength_val is not None:
+            strengths.append(strength_val)
+        evaluation = row[5]
+        if evaluation in ("符合设计要求", "不符合设计要求"):
+            meets_design_flags.append(evaluation == "符合设计要求")
+
+    return {
+        "min_strength": min(strengths) if strengths else None,
+        "meets_design": all(meets_design_flags) if meets_design_flags else None
+    }
+
+
+def _extract_location(record: Dict[str, Any], confirmed: Dict[str, Any]) -> str:
+    """???????????????????????"""
+    location = confirmed.get("location", {}) if isinstance(confirmed.get("location"), dict) else {}
+    description = location.get("description")
+    if description:
+        return str(description)
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        raw_location = raw.get("检测部位") or raw.get("test_location") or raw.get("抽测部位")
+        if raw_location:
+            return str(raw_location)
+
+    raw_result = confirmed.get("raw_result", {}) if isinstance(confirmed.get("raw_result"), dict) else {}
+    raw_location = raw_result.get("test_location")
+    if raw_location:
+        return str(raw_location)
+
+    if record.get("test_location_text"):
+        return str(record.get("test_location_text"))
+    return ""
+
+
+def _extract_design_grade(record: Dict[str, Any], confirmed: Dict[str, Any]) -> str:
+    """???????C30 ??"""
+    grade = confirmed.get("design_strength_grade")
+    if grade:
+        return str(grade)
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        raw_grade = raw.get("设计强度等级") or raw.get("design_strength_grade")
+        if raw_grade:
+            return str(raw_grade)
+
+    raw_result = confirmed.get("raw_result", {}) if isinstance(confirmed.get("raw_result"), dict) else {}
+    raw_grade = raw_result.get("design_strength_grade")
+    if raw_grade:
+        return str(raw_grade)
+
+    grade = record.get("design_strength_grade")
+    return str(grade) if grade else ""
+
+
+def _extract_strength_estimated(record: Dict[str, Any], confirmed: Dict[str, Any]) -> Optional[float]:
+    """???????????????"""
+    value = confirmed.get("strength_estimated")
+    if value is not None:
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+    return _extract_strength_value(record)
+
+
+def _extract_carbonation_avg(record: Dict[str, Any], confirmed: Dict[str, Any]) -> Optional[float]:
+    """???????"""
+    value = confirmed.get("carbonation_depth_avg")
+    if value is not None:
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return None
+    return _extract_carbonation_depth(record)
+
+
+def _evaluate_strength(strength_estimated: Optional[float], design_grade: str) -> str:
+    """??????????????"""
+    design_value = _parse_design_grade(design_grade)
+    if strength_estimated is None or design_value is None:
+        return ""
+    return "符合设计要求" if strength_estimated >= design_value else "不符合设计要求"
+
+
+def _parse_design_grade(grade: str) -> Optional[float]:
+    """? C30 ??? 30"""
+    if not grade:
+        return None
+    import re
+    match = re.match(r"^C(\d+)$", str(grade))
+    if not match:
+        return None
+    try:
+        return float(match.group(1))
+    except ValueError:
+        return None
+
+
+def _format_number(value: Optional[float]) -> str:
+    if value is None:
+        return ""
+    try:
+        return str(round(float(value), 1))
+    except (ValueError, TypeError):
+        return ""
+
+
+def _parse_number(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_date_string(value: Any):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%Y.%m.%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _extract_age_days_from_record(record: Dict[str, Any]) -> Optional[int]:
+    """?????? raw_result/confirmed_result ?????"""
+    confirmed = record.get("confirmed_result", {}) or {}
+    if isinstance(confirmed, dict):
+        raw_result = confirmed.get("raw_result", {}) if isinstance(confirmed.get("raw_result"), dict) else {}
+        age_days = raw_result.get("concrete_age_days") or confirmed.get("concrete_age_days")
+        if age_days is not None:
+            try:
+                return int(age_days)
+            except (ValueError, TypeError):
+                return None
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        age_days = raw.get("concrete_age_days")
+        if age_days is not None:
+            try:
+                return int(age_days)
+            except (ValueError, TypeError):
+                return None
+
+        build_date = raw.get("施工日期")
+        test_date = raw.get("检测日期") or raw.get("test_date")
+        if build_date and test_date:
+            build_dt = _parse_date_string(build_date)
+            test_dt = _parse_date_string(test_date)
+            if build_dt and test_dt:
+                delta = test_dt - build_dt
+                return delta.days
+
+    return None
+
+
+def _extract_age_correction_factor_from_record(record: Dict[str, Any]) -> Optional[float]:
+    """?????????? confirmed_result/raw_result ??"""
+    confirmed = record.get("confirmed_result", {}) or {}
+    if isinstance(confirmed, dict):
+        factor = confirmed.get("age_correction_factor")
+        if factor is not None:
+            try:
+                return float(factor)
+            except (ValueError, TypeError):
+                return None
+
+    raw = record.get("raw_result", {}) or {}
+    if isinstance(raw, dict):
+        factor = raw.get("age_correction_factor") or raw.get("修正系数")
+        if factor is not None:
+            try:
+                return float(factor)
+            except (ValueError, TypeError):
+                return None
+
+    return None
+
+
+def _extract_age_days(data: Dict[str, Any]) -> Optional[int]:
+    """??????????????????"""
+    raw = data.get("age_days")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return None
+
+
+def _extract_age_correction_factor(data: Dict[str, Any]) -> Optional[float]:
+    """??????????????????????"""
+    raw = data.get("age_correction_factor")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (ValueError, TypeError):
+        return None
 def _deduplicate_refs(refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """去除重复的证据引用"""
     seen = set()

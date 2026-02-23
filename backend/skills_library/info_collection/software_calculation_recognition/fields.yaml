@@ -1,0 +1,42 @@
+skill: software_calculation_recognition
+version: "1.0.0"
+description: "软件计算结果识别字段定义"
+
+output_schema:
+  type: object
+  properties:
+    mortar_strength_mpa:
+      type: number
+      description: "砌筑砂浆抗压强度取值（MPa）"
+    brick_strength_grade:
+      type: string
+      description: "砌墙砖抗压强度等级（MUx.x）"
+    live_loads:
+      type: object
+      properties:
+        non_accessible_roof:
+          type: number
+        living_room_bedroom_kitchen_wc:
+          type: number
+        stair_and_balcony:
+          type: number
+    dead_loads:
+      type: object
+      properties:
+        roof:
+          type: number
+        floor_prefab:
+          type: number
+        stair_room:
+          type: number
+    load_combination_type:
+      type: string
+    wind_snow_terrain:
+      type: object
+      properties:
+        basic_wind_pressure:
+          type: number
+        basic_snow_pressure:
+          type: number
+        terrain_category:
+          type: string

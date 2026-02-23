@@ -17,7 +17,14 @@ from services.skill_registry.registry import SkillRegistry, SkillType
 from models.db import insert_professional_data, insert_run_log
 
 # 导入共享的数据处理函数（需要直接导入，因为它们在模块级别）
-from api.declarative_skill_routes import _normalize_record, _build_payload
+from api.declarative_skill_routes import (
+    _normalize_record,
+    _build_payload,
+    _pick_output_arg,
+    _resolve_report_path,
+    _extract_report_entries,
+    _extract_entry_data,
+)
 
 router = APIRouter()
 
@@ -173,10 +180,11 @@ async def orchestrate_files(
                     temp_dirs.append(output_dir)
                     
                     # 执行技能
+                    output_arg = _pick_output_arg(skill_name)
                     script_args = [
                         str(file_path),
                         "--format", "json",
-                        "--output-dir", str(output_dir),
+                        output_arg, str(output_dir),
                     ]
                     
                     skill_result = await executor.execute(
@@ -189,18 +197,17 @@ async def orchestrate_files(
                     
                     # 处理脚本输出
                     extracted_records = []
-                    report_path = output_dir / "processing_report.json"
+                    report_path = _resolve_report_path(skill_name, output_dir)
                     
-                    if report_path.exists():
+                    if report_path and report_path.exists():
                         report = json.loads(report_path.read_text(encoding="utf-8"))
-                        for entry in report:
-                            if not entry.get("success"):
+                        for entry in _extract_report_entries(report):
+                            if entry.get("success") is False:
                                 continue
-                            table_type = entry.get("type")
-                            data = entry.get("data") or []
-                            if isinstance(data, dict):
-                                data = [data]
-                            for record in data:
+                            if entry.get("status") == "error":
+                                continue
+                            table_type = entry.get("type") or entry.get("table_type")
+                            for record in _extract_entry_data(entry):
                                 extracted_records.append({
                                     "table_type": table_type,
                                     "data": record,

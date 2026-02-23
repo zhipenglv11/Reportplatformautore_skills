@@ -245,11 +245,195 @@ def assemble_content(
     # 添加各子section的内容
     for section in sections:
         content = section.get("content", "")
-        if content:
+        if isinstance(content, str) and content:
             paragraphs.append(content)
+        elif isinstance(content, dict):
+            rendered = _render_content(content)
+            if rendered:
+                paragraphs.append(rendered)
     
     # 用双换行符连接段落
     return "\n\n".join(paragraphs)
+
+def _render_content(content: Dict[str, Any]) -> Optional[str]:
+    content_type = content.get("type")
+    if content_type == "concrete_strength":
+        return _render_concrete_strength(content)
+    if content_type == "brick_strength":
+        return _render_brick_strength(content)
+    if content_type == "mortar_strength":
+        return _render_mortar_strength(content)
+    return None
+
+
+def _render_concrete_strength(content: Dict[str, Any]) -> Optional[str]:
+    paragraphs = []
+    for item in content.get("paragraphs", []):
+        template = item.get("template")
+        data = item.get("data", {})
+
+        if template == "concrete_overview":
+            test_method = data.get("test_method") or "回弹法"
+            test_count = data.get("test_count") or 0
+            paragraphs.append(f"现场采用{test_method}对混凝土构件强度进行抽测，共抽测{test_count}个构件。")
+
+        elif template == "concrete_age_and_carbonation":
+            parts = []
+            age_days = data.get("age_days")
+            if isinstance(age_days, int):
+                if data.get("age_over_1000"):
+                    parts.append("由于混凝土龄期已超过1000天")
+                else:
+                    parts.append(f"混凝土龄期为{age_days}天")
+
+            carbonation_avg = data.get("carbonation_depth_avg")
+            if isinstance(carbonation_avg, (int, float)):
+                if data.get("carbonation_over_6"):
+                    parts.append("碳化深度均大于6mm")
+                else:
+                    parts.append(f"碳化深度平均值为{_format_number(carbonation_avg)}mm")
+
+            code_reference = data.get("code_reference")
+            if code_reference:
+                parts.append(f"依据{code_reference}进行修正")
+
+            age_correction_factor = data.get("age_correction_factor")
+            if isinstance(age_correction_factor, (int, float)):
+                parts.append(f"混凝土强度修正系数取{_format_number(age_correction_factor)}")
+
+            if parts:
+                paragraphs.append("，".join(parts) + "。")
+
+        elif template == "concrete_result_summary":
+            min_strength = data.get("min_strength")
+            design_grade = data.get("design_strength_grade")
+            meets_design = data.get("meets_design")
+
+            if isinstance(min_strength, (int, float)):
+                sentence = f"由上表可知，抽测的混凝土构件抗压强度最小值为{_format_number(min_strength)}MPa"
+                if meets_design is True:
+                    if design_grade:
+                        sentence += f"，符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，符合设计要求"
+                elif meets_design is False:
+                    if design_grade:
+                        sentence += f"，不符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，不符合设计要求"
+                paragraphs.append(sentence + "。")
+            elif meets_design is True:
+                paragraphs.append("抽测结果符合设计要求。")
+            elif meets_design is False:
+                paragraphs.append("抽测结果不符合设计要求。")
+
+        elif template == "concrete_table_ref":
+            table_title = data.get("table_title")
+            if table_title:
+                paragraphs.append(f"抽测结果见{table_title}。")
+            else:
+                paragraphs.append("抽测结果见下表。")
+
+    return "".join(paragraphs) if paragraphs else None
+
+
+def _format_number(value: Any) -> str:
+    try:
+        return str(round(float(value), 1))
+    except (ValueError, TypeError):
+        return ""
+
+
+def _render_brick_strength(content: Dict[str, Any]) -> Optional[str]:
+    paragraphs = []
+    for item in content.get("paragraphs", []):
+        template = item.get("template")
+        data = item.get("data", {})
+
+        if template == "brick_overview":
+            test_method = data.get("test_method") or "回弹法"
+            test_count = data.get("test_count") or 0
+            paragraphs.append(f"采用{test_method}对砌体砖强度进行抽测，共抽测{test_count}个部位。")
+
+        elif template == "brick_result_summary":
+            min_strength = data.get("min_strength")
+            design_grade = data.get("design_strength_grade")
+            meets_design = data.get("meets_design")
+
+            if isinstance(min_strength, (int, float)):
+                sentence = f"由上表可知，抽测的砌体砖抗压强度最小值为{_format_number(min_strength)}MPa"
+                if meets_design is True:
+                    if design_grade:
+                        sentence += f"，符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，符合设计要求"
+                elif meets_design is False:
+                    if design_grade:
+                        sentence += f"，不符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，不符合设计要求"
+                paragraphs.append(sentence + "。")
+            elif meets_design is True:
+                paragraphs.append("抽测结果符合设计要求。")
+            elif meets_design is False:
+                paragraphs.append("抽测结果不符合设计要求。")
+
+        elif template == "brick_table_ref":
+            table_title = data.get("table_title")
+            if table_title:
+                paragraphs.append(f"抽测结果见{table_title}。")
+            else:
+                paragraphs.append("抽测结果见下表。")
+
+    return "".join(paragraphs) if paragraphs else None
+
+
+def _render_mortar_strength(content: Dict[str, Any]) -> Optional[str]:
+    paragraphs = []
+    for item in content.get("paragraphs", []):
+        template = item.get("template")
+        data = item.get("data", {})
+
+        if template == "mortar_overview":
+            test_method = data.get("test_method") or "回弹法"
+            test_count = data.get("test_count") or 0
+            paragraphs.append(f"采用{test_method}对砂浆强度进行抽测，共抽测{test_count}个测点。")
+
+        elif template == "mortar_result_summary":
+            min_strength = data.get("min_strength")
+            design_grade = data.get("design_strength_grade")
+            meets_design = data.get("meets_design")
+
+            if isinstance(min_strength, (int, float)):
+                sentence = f"由上表可知，抽测的砂浆抗压强度最小值为{_format_number(min_strength)}MPa"
+                if meets_design is True:
+                    if design_grade:
+                        sentence += f"，符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，符合设计要求"
+                elif meets_design is False:
+                    if design_grade:
+                        sentence += f"，不符合设计强度等级{design_grade}要求"
+                    else:
+                        sentence += "，不符合设计要求"
+                paragraphs.append(sentence + "。")
+            elif meets_design is True:
+                paragraphs.append("抽测结果符合设计要求。")
+            elif meets_design is False:
+                paragraphs.append("抽测结果不符合设计要求。")
+
+        elif template == "mortar_table_ref":
+            table_title = data.get("table_title")
+            if table_title:
+                paragraphs.append(f"抽测结果见{table_title}。")
+            else:
+                paragraphs.append("抽测结果见下表。")
+
+    return "".join(paragraphs) if paragraphs else None
+
+
+
+
 
 
 def generate_overview(sections: List[Dict[str, Any]]) -> Optional[str]:

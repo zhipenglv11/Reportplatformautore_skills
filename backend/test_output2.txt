@@ -1,0 +1,212 @@
+﻿python : [BRICK] parse_brick_strength called with:
+所在位置 行:1 字符: 33
++ ... :PYTHONIOENCODING='utf-8'; python test_source_node_id.py 2>&1 | Out-F ...
++                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([BRICK] parse_b...th called with: 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  - project_id: 1 (type: <class 'str'>)
+  - node_id: test-node
+  - source_node_id: collection-1769823801623
+  - context: {'source_node_id': 'collection-1769823801623'}
+[BRICK] SQL Query: 
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+           AND node_id = :src 
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+          
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    
+[BRICK] SQL Params: {'pid': '1', 'src': 'collection-1769823801623'}
+[BRICK] node_filter: ' AND node_id = :src '
+[BRICK] scope_filter: ''
+[BRICK] Found 1 rows
+[BRICK] parse_brick_strength called with:
+  - project_id: 1 (type: <class 'str'>)
+  - node_id: test-node
+  - source_node_id: collection-1769823550775
+  - context: {'source_node_id': 'collection-1769823550775'}
+[BRICK] SQL Query: 
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+           AND node_id = :src 
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+          
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    
+[BRICK] SQL Params: {'pid': '1', 'src': 'collection-1769823550775'}
+[BRICK] node_filter: ' AND node_id = :src '
+[BRICK] scope_filter: ''
+[BRICK] Found 2 rows
+[BRICK] parse_brick_strength called with:
+  - project_id: 1 (type: <class 'str'>)
+  - node_id: test-node
+  - source_node_id: collection-1769242176129
+  - context: {'source_node_id': 'collection-1769242176129'}
+[BRICK] SQL Query: 
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+           AND node_id = :src 
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+          
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    
+[BRICK] SQL Params: {'pid': '1', 'src': 'collection-1769242176129'}
+[BRICK] node_filter: ' AND node_id = :src '
+[BRICK] scope_filter: ''
+[BRICK] Found 1 rows
+[BRICK] parse_brick_strength called with:
+  - project_id: 1 (type: <class 'str'>)
+  - node_id: test-node
+  - source_node_id: wrong-node-id
+  - context: {'source_node_id': 'wrong-node-id'}
+[BRICK] SQL Query: 
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+           AND node_id = :src 
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+          
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    
+[BRICK] SQL Params: {'pid': '1', 'src': 'wrong-node-id'}
+[BRICK] node_filter: ' AND node_id = :src '
+[BRICK] scope_filter: ''
+[BRICK] Found 0 rows
+[BRICK] parse_brick_strength called with:
+  - project_id: 1 (type: <class 'str'>)
+  - node_id: test-node
+  - source_node_id: scope_brick_strength
+  - context: {'source_node_id': 'scope_brick_strength'}
+[BRICK] SQL Query: 
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+          
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+           AND (LOWER(test_item) LIKE '%brick%' OR test_item LIKE '%砖%') 
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    
+[BRICK] SQL Params: {'pid': '1', 'src': 'scope_brick_strength'}
+[BRICK] node_filter: ''
+[BRICK] scope_filter: ' AND (LOWER(test_item) LIKE '%brick%' OR test_item LIKE 
+'%砖%') '
+[BRICK] Found 4 rows
+================================================================================
+测试砖强度 API（带 source_node_id）
+================================================================================
+
+砖 node_id 1:
+  source_node_id: collection-1769823801623
+  -> Found records: 1
+
+砖 node_id 2:
+  source_node_id: collection-1769823550775
+  -> Found records: 2
+
+砖 node_id 3:
+  source_node_id: collection-1769242176129
+  -> Found records: 1
+
+错误的 node_id:
+  source_node_id: wrong-node-id
+  -> Found records: 0
+  -> Warnings: ['未找到砖相关的检测数据']
+
+scope 过滤:
+  source_node_id: scope_brick_strength
+  -> Found records: 4

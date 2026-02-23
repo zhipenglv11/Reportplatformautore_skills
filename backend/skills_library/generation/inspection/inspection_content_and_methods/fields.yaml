@@ -1,0 +1,122 @@
+# 鉴定内容和方法及原始记录一览表字段定义
+
+section_1:
+  name: 鉴定内容和方法
+  items:
+    - name: foundation_appraisal
+      label: 地基危险性鉴定
+      type: object
+      description: 对鉴定对象地基进行危险性鉴定
+      fields:
+        - content: 对鉴定对象地基进行危险性鉴定，评定鉴定对象地基的危险性状态。
+        - method: 通过分析鉴定对象倾斜观测资料和其不均匀沉降引起上部结构反应的检查结果进行判定。
+
+    - name: foundation_and_superstructure
+      label: 基础及上部结构危险性鉴定
+      type: object
+      description: 对鉴定对象基础及上部结构进行危险性鉴定
+      sub_items:
+        - name: foundation
+          label: 基础危险性鉴定
+          content: 对鉴定对象基础进行危险性鉴定。通过分析鉴定对象倾斜观测资料和其不均匀沉降引起上部结构反应的检查结果进行判定。
+        
+        - name: superstructure
+          label: 上部结构危险性鉴定
+          sub_steps:
+            - step: "1)"
+              content: 依据设计图纸及国家相关规范标准要求对鉴定对象结构布置、轴网尺寸、层高、构件尺寸等进行检查检测，检查鉴定对象主体结构是否有拆改情况。
+            
+            - step: "2)"
+              content: 对鉴定对象上部结构完损情况进行检查。砌体结构构件主要检查构造连接部位状况；检查纵横墙体交接处是否存在斜向或竖向裂缝状况；检查承重墙体是否存在拆改、裂缝、变形状况。混凝土结构构件主要检查开裂、剥落、露筋、钢筋锈蚀等，检测构件的截面尺寸等。
+            
+            - step: "3)"
+              content: 对鉴定对象围护结构承重构件，主要检查围护系统中砌体自承重墙、门窗洞口过梁及拆改状况。
+            
+            - step: "4)"
+              content: 根据设计图纸及现场检查检测结果，综合整理后利用PKPM建模计算分析，确定鉴定对象结构构件的承载能力并评级。
+            
+            - step: "5)"
+              content: 在确定危险构件的基础上，评定鉴定对象上部承重结构的危险性等级。
+
+    - name: comprehensive_evaluation
+      label: 综合评定
+      type: text
+      content: 综合评定鉴定对象的危险性等级。根据现场检查、检测情况及计算结果，按照《危险房屋鉴定标准》(JGJ125-2016) 对鉴定对象进行综合分析评定。
+
+section_2:
+  name: 主要检测仪器设备
+  type: table
+  columns:
+    - key: instrument_name
+      label: 仪器名称
+      type: string
+    - key: model
+      label: 规格型号
+      type: string
+    - key: serial_number
+      label: 编号
+      type: string
+    - key: valid_until
+      label: 有效截止日期
+      type: date
+  
+  default_instruments:
+    - instrument_name: 手持式激光测距仪
+      model: GLM40
+      serial_number: MLG01-01
+      valid_until: "2026-1-12"
+    
+    - instrument_name: 钢卷尺
+      model: 5M
+      serial_number: ELG04-14
+      valid_until: "2026-2-10"
+    
+    - instrument_name: 贯入式砂浆强度检测仪
+      model: SJY-800B
+      serial_number: EFD-02-2
+      valid_until: "2025-10-13"
+    
+    - instrument_name: 测砖回弹仪
+      model: ZC4
+      serial_number: EFP21-2
+      valid_until: "2025-4-13"
+    
+    - instrument_name: 钢筋扫描仪
+      model: PROFOMETER-6
+      serial_number: ESP02-8
+      valid_until: "2025-10-13"
+    
+    - instrument_name: 全站仪
+      model: ES-602G
+      serial_number: FH2770
+      valid_until: "2025-4-5"
+
+section_3:
+  name: 原始记录一览表
+  type: table
+  columns:
+    - key: record_name
+      label: 原始记录名称
+      type: string
+    - key: internal_number
+      label: 内部编号
+      type: string
+  
+  default_records:
+    - record_name: 结构布置检查原始记录
+      internal_number: "NO:2500063"
+    
+    - record_name: 结构构件拆改检查原始记录
+      internal_number: "NO:2500114~2500115"
+    
+    - record_name: 贯入法检测砂浆强度原始记录
+      internal_number: "NO:2500108~2500109"
+    
+    - record_name: 砖回弹原始记录
+      internal_number: "NO:2500015~2500018"
+    
+    - record_name: 倾斜测量检测原始记录
+      internal_number: "NO: 2500014"
+    
+    - record_name: PKPM计算原始记录
+      internal_number: "NO:2500051"

@@ -1,11 +1,15 @@
-"""
-Brick Strength Sub-Skill - 数据解析与生成
-专门负责砌体砖强度检测描述
+﻿"""
+Brick strength parsing skill.
 """
 
-from typing import Dict, List, Any, Optional
-import logging
+from __future__ import annotations
+
 from datetime import datetime
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -13,289 +17,261 @@ logger = logging.getLogger(__name__)
 async def parse_brick_strength(
     project_id: str,
     node_id: str,
-    context: Optional[Dict[str, Any]] = None
+    context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """
-    解析砌体砖强度数据并生成描述
+    context = context or {}
+    source_node_id = context.get("source_node_id") or context.get("sourceNodeId")
+
+    # 调试日志
+    logger.warning(f"[BRICK] parse_brick_strength called with:")
+    logger.warning(f"  - project_id: {project_id} (type: {type(project_id)})")
+    logger.warning(f"  - node_id: {node_id}")
+    logger.warning(f"  - source_node_id: {source_node_id}")
+    logger.warning(f"  - context: {context}")
+
+    records = await _fetch_brick_data(project_id, source_node_id)
     
-    Args:
-        project_id: 项目ID
-        node_id: 节点ID
-        context: 上下文配置
-    
-    Returns:
-        结构化的砌体砖强度描述数据
-    """
-    # 1. 从数据库读取砌体砖数据
-    records = await _fetch_brick_data(project_id, node_id)
+    # 容错：如果指定了 source_node_id 但查不到数据，尝试不过滤 source_node_id
+    if not records and source_node_id and not str(source_node_id).startswith("scope_"):
+        logger.warning(f"[BRICK] No data found with source_node_id={source_node_id}, retrying without node filter...")
+        records = await _fetch_brick_data(project_id, None)
     
     if not records:
-        logger.info(f"Project {project_id}, Node {node_id}: 未找到砌体砖强度数据")
         return {
-            "has_data": False,
-            "material_type": "brick"
+            "dataset_key": "brick_strength",
+            "content": "",
+            "table": {"columns": [], "rows": []},
+            "meta": {
+                "source": "dynamic_db",
+                "material_type": "brick",
+                "title": "砖强度",
+                "has_data": False,
+                "warnings": ["未找到砖相关的检测数据"],
+                "record_count": 0,
+                "source_node_id": source_node_id,
+            },
         }
-    
-    # 2. 提取字段数据
-    parsed_data = _extract_fields(records)
-    
-    # 3. 验证数据
-    validation = _validate_data(parsed_data)
-    if validation["warnings"]:
-        logger.warning(f"砌体砖数据验证警告: {validation['warnings']}")
-    
-    # 4. 生成描述文字
-    content = _generate_content(parsed_data)
-    
-    # 5. 返回结构化结果
+
+    strength_values: List[float] = []
+    for record in records:
+        strength_values.extend(_extract_strength_values(record))
+
+    if not strength_values:
+        return {
+            "dataset_key": "brick_strength",
+            "content": "",
+            "table": {"columns": [], "rows": []},
+            "meta": {
+                "source": "dynamic_db",
+                "material_type": "brick",
+                "title": "砖强度",
+                "has_data": False,
+                "warnings": ["已检索到砖记录，但未提取到强度值"],
+                "record_count": len(records),
+                "source_node_id": source_node_id,
+            },
+        }
+
+    avg_strength = round(sum(strength_values) / len(strength_values), 1)
+    min_strength = round(min(strength_values), 1)
+    max_strength = round(max(strength_values), 1)
+
+    table = _generate_table(records)
+    test_method = "回弹法"
+
+    content = (
+        "依据《砌体工程现场检测技术标准》（GB/T50315-2011），采用回弹法检测砌体砖抗压强度，检测结果见表。"
+        f"\n\n由上表可知，所测墙体烧结砖抗压强度范围为{min_strength}~{max_strength}MPa。"
+    )
+
     return {
-        "has_data": True,
-        "material_type": "brick",
-        "title": "砌体砖强度",
+        "dataset_key": "brick_strength",
         "content": content,
-        "test_count": parsed_data["test_count"],
-        "test_method": parsed_data["test_method"],
-        "avg_strength": parsed_data["avg_strength"],
-        "strength_range": parsed_data.get("strength_range"),
-        "strength_grade": parsed_data.get("strength_grade"),
-        "strength_unit": "MPa",
-        "evidence_refs": parsed_data["evidence_refs"],
-        "record_ids": parsed_data["record_ids"],
-        "generation_metadata": {
-            "skill_name": "brick_strength",
-            "skill_version": "1.0.0",
-            "generated_at": datetime.utcnow().isoformat(),
+        "table": table,
+        "meta": {
+            "source": "dynamic_db",
+            "material_type": "brick",
+            "title": "砖强度",
+            "has_data": True,
+            "test_count": len(strength_values),
             "record_count": len(records),
-            "test_methods_used": [parsed_data["test_method"]],
-            "warnings": validation["warnings"]
-        }
+            "test_method": test_method,
+            "avg_strength": avg_strength,
+            "strength_range": {"min": min_strength, "max": max_strength},
+            "strength_unit": "MPa",
+            "generated_at": datetime.utcnow().isoformat(),
+            "source_node_id": source_node_id,
+            "warnings": [],
+        },
     }
 
 
-async def _fetch_brick_data(project_id: str, node_id: str) -> List[Dict[str, Any]]:
-    """从professional_data表获取砌体砖数据"""
+async def _fetch_brick_data(project_id: str, source_node_id: Optional[str]) -> List[Dict[str, Any]]:
     from models.db import get_engine
-    from sqlalchemy import text
-    
+
+    params: Dict[str, Any] = {"pid": project_id, "src": source_node_id}
+    node_filter = ""
+
+    if source_node_id and not str(source_node_id).startswith("scope_"):
+        node_filter = " AND node_id = :src "
+
+    scope_filter = ""
+    if source_node_id == "scope_brick_strength":
+        scope_filter = " AND (LOWER(test_item) LIKE '%brick%' OR test_item LIKE '%砖%') "
+
+    sql = f"""
+        SELECT
+            id,
+            node_id,
+            test_item,
+            test_result,
+            strength_estimated_mpa,
+            design_strength_grade,
+            test_date,
+            test_location_text,
+            confirmed_result,
+            raw_result,
+            evidence_refs,
+            created_at
+        FROM professional_data
+        WHERE project_id = :pid
+          {node_filter}
+          AND (
+              LOWER(test_item) LIKE '%brick%'
+              OR test_item = 'brick_table_recognition'
+              OR test_item = 'brick_strength'
+              OR test_item LIKE '%砖%'
+          )
+          {scope_filter}
+          AND (confirmed_result IS NOT NULL OR raw_result IS NOT NULL)
+        ORDER BY created_at DESC
+    """
+
+    # 调试日志
+    logger.warning(f"[BRICK] SQL Query: {sql}")
+    logger.warning(f"[BRICK] SQL Params: {params}")
+    logger.warning(f"[BRICK] node_filter: '{node_filter}'")
+    logger.warning(f"[BRICK] scope_filter: '{scope_filter}'")
+
     try:
         engine = get_engine()
         with engine.connect() as conn:
-            result = conn.execute(
-                text("""
-                    SELECT
-                        id,
-                        test_item,
-                        test_result,
-                        strength_estimated_mpa,
-                        design_strength_grade,
-                        test_date,
-                        test_location_text,
-                        confirmed_result,
-                        evidence_refs
-                    FROM professional_data
-                    WHERE project_id = :pid
-                    AND node_id = :nid
-                    AND (test_item LIKE '%砌体砖%' OR test_item LIKE '%砖强度%')
-                    AND confirmed_result IS NOT NULL
-                    ORDER BY test_date DESC, created_at DESC
-                """),
-                {"pid": project_id, "nid": node_id}
-            )
-            
-            records = []
-            for row in result:
-                record = dict(row._mapping)
-                # 解析JSONB字段
-                if isinstance(record.get("confirmed_result"), str):
-                    import json
-                    try:
-                        record["confirmed_result"] = json.loads(record["confirmed_result"])
-                    except Exception:
-                        pass
-                if isinstance(record.get("evidence_refs"), str):
-                    import json
-                    try:
-                        record["evidence_refs"] = json.loads(record["evidence_refs"])
-                    except Exception:
-                        record["evidence_refs"] = []
-                records.append(record)
-            
-            return records
-    
-    except Exception as e:
-        logger.error(f"获取砌体砖数据失败: {e}")
+            rows = conn.execute(text(sql), params).fetchall()
+
+        logger.warning(f"[BRICK] Found {len(rows)} rows")
+
+        out: List[Dict[str, Any]] = []
+        for row in rows:
+            record = dict(row._mapping)
+            record["confirmed_result"] = _parse_json(record.get("confirmed_result"))
+            record["raw_result"] = _parse_json(record.get("raw_result"))
+            record["evidence_refs"] = _parse_json(record.get("evidence_refs"))
+            out.append(record)
+        return out
+    except Exception as exc:
+        logger.error("fetch brick data failed: %s", exc, exc_info=True)
         return []
 
 
-def _extract_fields(records: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """按fields.yaml定义提取字段"""
-    # 提取强度值
-    strength_values = []
-    for record in records:
-        strength = _extract_strength_value(record)
-        if strength is not None:
-            strength_values.append(strength)
-    
-    if not strength_values:
-        raise ValueError("未找到有效的强度值")
-    
-    # 计算统计值
-    avg_strength = round(sum(strength_values) / len(strength_values), 1)
-    strength_range = {
-        "min": round(min(strength_values), 1),
-        "max": round(max(strength_values), 1)
-    } if len(strength_values) > 1 else None
-    
-    # 提取其他字段（从第一条记录）
-    first_record = records[0]
-    
-    # 收集证据
-    all_evidence_refs = []
-    record_ids = []
-    for record in records:
-        refs = record.get("evidence_refs") or []
-        if isinstance(refs, list):
-            all_evidence_refs.extend(refs)
-        record_ids.append(record.get("id"))
-    
-    return {
-        "test_count": len(records),
-        "avg_strength": avg_strength,
-        "strength_range": strength_range,
-        "strength_grade": _extract_strength_grade(first_record),
-        "test_method": _extract_test_method(first_record),
-        "test_date": first_record.get("test_date"),
-        "evidence_refs": _deduplicate_refs(all_evidence_refs),
-        "record_ids": record_ids,
-        "code_reference": ["GB/T 50315-2011", "GB 50003-2011"]
-    }
-
-
-def _extract_strength_value(record: Dict[str, Any]) -> Optional[float]:
-    """提取强度值 - 按优先级"""
-    confirmed = record.get("confirmed_result", {}) or {}
-    
-    # 优先级1
-    if isinstance(confirmed, dict):
-        strength = confirmed.get("rebound_strength") or confirmed.get("strength_estimated")
-        if strength is not None:
-            try:
-                return float(strength)
-            except (ValueError, TypeError):
-                pass
-    
-    # 优先级2
-    strength = record.get("strength_estimated_mpa")
-    if strength is not None:
+def _parse_json(value: Any) -> Any:
+    if value is None:
+        return {}
+    if isinstance(value, (dict, list)):
+        return value
+    if isinstance(value, str):
         try:
-            return float(strength)
-        except (ValueError, TypeError):
-            pass
-    
-    # 优先级3
-    strength = record.get("test_result")
-    if strength is not None:
-        try:
-            return float(strength)
-        except (ValueError, TypeError):
-            pass
-    
-    return None
+            return json.loads(value)
+        except Exception:
+            return {}
+    return {}
 
 
-def _extract_strength_grade(record: Dict[str, Any]) -> Optional[str]:
-    """提取强度等级（砌体砖用MU格式）"""
-    confirmed = record.get("confirmed_result", {}) or {}
-    if isinstance(confirmed, dict):
-        grade = confirmed.get("strength_grade")
-        if grade:
-            grade_str = str(grade)
-            # 验证MU格式
-            import re
-            if re.match(r"^MU\d+$", grade_str):
-                return grade_str
-    
-    grade = record.get("design_strength_grade")
-    if grade:
-        grade_str = str(grade)
-        import re
-        if re.match(r"^MU\d+$", grade_str):
-            return grade_str
-    
-    return None
+def _to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
-def _extract_test_method(record: Dict[str, Any]) -> str:
-    """提取检测方法"""
-    confirmed = record.get("confirmed_result", {}) or {}
-    if isinstance(confirmed, dict):
-        method = confirmed.get("test_method")
-        if method:
-            return str(method)
-    return "回弹法"
+def _extract_strength_values(record: Dict[str, Any]) -> List[float]:
+    values: List[float] = []
 
+    for key in ["strength_estimated_mpa", "test_result"]:
+        v = _to_float(record.get(key))
+        if v is not None:
+            values.append(v)
 
-def _deduplicate_refs(refs: List[Dict]) -> List[Dict]:
-    """去重证据引用"""
+    for payload in [record.get("confirmed_result") or {}, record.get("raw_result") or {}]:
+        if not isinstance(payload, dict):
+            continue
+
+        for key in [
+            "strength_estimated_mpa",
+            "strength_estimated",
+            "rebound_strength",
+            "estimated_strength_mpa",
+            "test_result",
+        ]:
+            v = _to_float(payload.get(key))
+            if v is not None:
+                values.append(v)
+
+        rows = payload.get("rows")
+        if isinstance(rows, list):
+            for item in rows:
+                if not isinstance(item, dict):
+                    continue
+                for key in ["estimated_strength_mpa", "strength_estimated_mpa", "rebound_strength"]:
+                    v = _to_float(item.get(key))
+                    if v is not None:
+                        values.append(v)
+
+    dedup: List[float] = []
     seen = set()
-    unique = []
-    for ref in refs:
-        key = (ref.get("record_id"), ref.get("field_path"))
-        if key not in seen:
-            seen.add(key)
-            unique.append(ref)
-    return unique
+    for v in values:
+        k = round(v, 4)
+        if k in seen:
+            continue
+        seen.add(k)
+        dedup.append(v)
+    return dedup
 
 
-def _validate_data(data: Dict[str, Any]) -> Dict[str, Any]:
-    """验证数据质量"""
-    warnings = []
-    
-    # 检查test_count
-    if data["test_count"] < 1:
-        warnings.append("检测部位数量少于1")
-    
-    # 检查强度范围
-    if data["avg_strength"] < 3.0 or data["avg_strength"] > 50.0:
-        warnings.append(f"平均强度{data['avg_strength']}MPa超出常见范围(3~50MPa)")
-    
-    # 检查强度等级匹配
-    if data.get("strength_grade"):
-        import re
-        match = re.match(r"^MU(\d+)$", data["strength_grade"])
-        if match:
-            grade_num = int(match.group(1))
-            if data["avg_strength"] < grade_num * 0.7:
-                warnings.append(f"平均强度{data['avg_strength']}MPa低于等级{data['strength_grade']}的70%")
-    
-    return {"valid": len(warnings) == 0, "warnings": warnings}
+def _extract_location_from_row(item: Dict[str, Any]) -> str:
+    for key in ["test_location", "location", "test_position", "位置", "部位"]:
+        val = item.get(key)
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    return ""
 
 
-def _generate_content(data: Dict[str, Any]) -> str:
-    """生成描述文字"""
-    parts = []
-    
-    # 第1部分：检测概述
-    overview = f"砌体砖采用{data['test_method']}检测，检测{data['test_count']}个部位"
-    parts.append(overview + "。")
-    
-    # 第2部分：检测结果
-    result_parts = []
-    
-    if data.get("strength_grade"):
-        result_parts.append(f"强度等级推定为{data['strength_grade']}")
-    
-    result_parts.append(f"强度推定值为{data['avg_strength']}MPa")
-    
-    if data.get("strength_range") and data["test_count"] > 1:
-        range_str = f"在{data['strength_range']['min']}~{data['strength_range']['max']}MPa之间"
-        result_parts.insert(0, f"砖强度推定值{range_str}")
-        result_parts[1] = f"平均值为{data['avg_strength']}MPa"
-    
-    parts.append("，".join(result_parts) + "。")
-    
-    # 第3部分：规范依据
-    code_list = "、".join(data["code_reference"])
-    parts.append(f"相关检测及结果判定依据{code_list}执行。")
-    
-    return "".join(parts)
+def _generate_table(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    columns = ["序号", "轴线部位", "砖抗压强度推定值（MPa）"]
+    rows: List[List[Any]] = []
+    idx = 1
+
+    for record in records:
+        payload = record.get("confirmed_result") or record.get("raw_result") or {}
+        if isinstance(payload, dict) and isinstance(payload.get("rows"), list):
+            for item in payload["rows"]:
+                if not isinstance(item, dict):
+                    continue
+                val = None
+                for key in ["estimated_strength_mpa", "strength_estimated_mpa", "rebound_strength"]:
+                    val = _to_float(item.get(key))
+                    if val is not None:
+                        break
+                if val is None:
+                    continue
+                rows.append([idx, _extract_location_from_row(item), f"{val:.1f}"])
+                idx += 1
+            continue
+
+        vals = _extract_strength_values(record)
+        if vals:
+            rows.append([idx, str(record.get("test_location_text") or ""), f"{vals[0]:.1f}"])
+            idx += 1
+
+    return {"columns": columns, "rows": rows}

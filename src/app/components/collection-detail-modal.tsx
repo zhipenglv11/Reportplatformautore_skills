@@ -87,6 +87,19 @@ export default function CollectionDetailModal({
   const [jsonErrorsByFile, setJsonErrorsByFile] = useState<Record<string, string | null>>({});
   const [viewMode, setViewMode] = useState<'form' | 'json'>('form');
 
+  const skillAllowlistByNodeType: Record<string, string[]> = {
+    'mortar-strength': ['mortar_table_recognition'],
+    'brick-strength': ['brick_table_recognition'],
+    'software-calculation': ['software_calculation_recognition'],
+  };
+  const preferredSkillByNodeType: Record<string, string> = {
+    'mortar-strength': 'mortar_table_recognition',
+    'brick-strength': 'brick_table_recognition',
+    'software-calculation': 'software_calculation_recognition',
+  };
+  const allowedSkillsForNode = skillAllowlistByNodeType[node?.data?.type] || [];
+  const preferredSkillForNode = preferredSkillByNodeType[node?.data?.type];
+
   // 当文件列表变化时，更新选中文件
   useEffect(() => {
     if (uploadedFiles.length === 0) {
@@ -114,6 +127,13 @@ export default function CollectionDetailModal({
   useEffect(() => {
     setPdfZoom(1);
   }, [selectedFile?.id]);
+
+  useEffect(() => {
+    if (!preferredSkillForNode) return;
+    if (!selectedSkill || (allowedSkillsForNode.length > 0 && !allowedSkillsForNode.includes(selectedSkill))) {
+      setSelectedSkill(preferredSkillForNode);
+    }
+  }, [preferredSkillForNode, selectedSkill, node?.id]);
 
   const MIDDLE_PANEL_WIDTH = 340; // 中间栏固定宽度
   const MIN_SIDE_MARGIN = 100; // 左右两侧最小留白距离
@@ -149,6 +169,10 @@ export default function CollectionDetailModal({
   const handleExecuteSkill = async () => {
     if (!selectedSkill || !selectedFile?.file) {
       alert('Please select a skill and file.');
+      return;
+    }
+    if (allowedSkillsForNode.length > 0 && !allowedSkillsForNode.includes(selectedSkill)) {
+      alert(`当前节点仅支持：${allowedSkillsForNode.join(' / ')}`);
       return;
     }
 
@@ -432,6 +456,11 @@ export default function CollectionDetailModal({
       'control_id': '控制编号',
       'record_no': '记录编号',
       'house_name': '房屋名称',
+      'house_details': '房屋详情',
+      'client_org': '委托单位',
+      'inspection_reason': '检测原因',
+      'inspection_basis': '检测依据',
+      'inspection_date': '检测日期',
       'table_type': '表格类型',
       'test_location_text': '检测部位',
       'design_strength_grade': '设计强度等级',
@@ -440,7 +469,19 @@ export default function CollectionDetailModal({
       'photo_index': '照片编号',
       'photo_no': '照片编号',
       'damage_location': '损伤位置',
-      'damage_description': '损伤描述'
+      'damage_description': '损伤描述',
+      'mortar_strength_mpa': '砌筑砂浆抗压强度取值(MPa)',
+      'brick_strength_grade': '砌墙砖抗压强度等级',
+      'live_loads': '活载',
+      'dead_loads': '恒载(含自重)',
+      'load_combination_type': '荷载基本组合类型',
+      'wind_snow_terrain': '风雪及场地参数',
+      'non_accessible_roof': '不上人屋面',
+      'living_room_bedroom_kitchen_wc': '客厅/卧室/厨房/卫生间',
+      'stair_and_balcony': '楼梯/阳台',
+      'roof': '屋面',
+      'floor_prefab': '楼面(预制板)',
+      'stair_room': '楼梯间'
     };
     const getLabel = (k: string) => labelMap[k] || k;
 
@@ -468,40 +509,112 @@ export default function CollectionDetailModal({
             <div className="divide-y divide-slate-50">
                {/* 先渲染非数组字段（meta 信息） */}
                {Object.entries(item).map(([key, val]) => {
-                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'signoff' || key === 'status';
+                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'parser' || key === 'signoff' || key === 'status';
                    if (isSystem) return null;
                    if (Array.isArray(val)) return null; // 跳过数组，后面渲染
                    
-                   // 特殊处理 meta 对象：展开其子字段
+                   // 特殊处理 meta 对象：展开其子字段（隐藏 source_file / parser）
                    if (key === 'meta' && typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                     const hiddenMetaKeys = new Set(['source_file', 'parser']);
+                     const metaEntries = Object.entries(val).filter(([subKey]) => !hiddenMetaKeys.has(subKey));
+                     if (metaEntries.length === 0) return null;
+                     return (
+                        <div key={key} className="border-t border-slate-100">
+                          <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100">
+                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{getLabel(key)}</span>
+                          </div>
+                          {metaEntries.map(([subKey, subVal]) => (
+                            <div key={subKey} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
+                               <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
+                                   <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(subKey)}>{getLabel(subKey)}</span>
+                              </div>
+                              <div className="sm:w-[65%] flex items-center relative">
+                                 <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                                 {/* 判断是否为长文本字段 */}
+                                 {subKey === 'house_details' || subKey === 'description' || subKey === 'notes' ? (
+                                    <textarea
+                                       className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
+                                       placeholder="-"
+                                       rows={3}
+                                       style={{ minHeight: '60px' }}
+                                       value={String(subVal ?? '')}
+                                       onInput={(e) => {
+                                          const target = e.currentTarget;
+                                          target.style.height = 'auto';
+                                          target.style.height = target.scrollHeight + 'px';
+                                       }}
+                                       ref={(el) => {
+                                          if (el) {
+                                             el.style.height = 'auto';
+                                             el.style.height = el.scrollHeight + 'px';
+                                          }
+                                       }}
+                                       onChange={(e) => {
+                                         const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+                                         if (newData[idx] && newData[idx][key]) {
+                                           newData[idx][key][subKey] = e.target.value;
+                                           const finalData = Array.isArray(data) ? newData : newData[0];
+                                           handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+                                         }
+                                       }}
+                                       onBlur={handleSaveCurrent}
+                                    />
+                                 ) : (
+                                    <input 
+                                       type="text" 
+                                       className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
+                                       placeholder="-"
+                                       value={String(subVal ?? '')}
+                                       onChange={(e) => {
+                                         const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+                                         if (newData[idx] && newData[idx][key]) {
+                                           newData[idx][key][subKey] = e.target.value;
+                                           const finalData = Array.isArray(data) ? newData : newData[0];
+                                           handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+                                         }
+                                       }}
+                                       onBlur={handleSaveCurrent}
+                                    /> 
+                                 )}
+                              </div>
+                           </div>
+                         ))}
+                        </div>
+                      );
+                    }
+
+                   // 通用对象字段展开（例如 live_loads / dead_loads / wind_snow_terrain）
+                   if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
+                     const objectEntries = Object.entries(val as Record<string, any>);
+                     if (objectEntries.length === 0) return null;
                      return (
                        <div key={key} className="border-t border-slate-100">
                          <div className="bg-slate-50/50 px-4 py-2 border-b border-slate-100">
                            <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wide">{getLabel(key)}</span>
                          </div>
-                         {Object.entries(val).map(([subKey, subVal]) => (
-                           <div key={subKey} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
-                              <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
-                                  <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(subKey)}>{getLabel(subKey)}</span>
-                              </div>
-                              <div className="sm:w-[65%] flex items-center relative">
-                                 <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                                 <input 
-                                    type="text" 
-                                    className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
-                                    placeholder="-"
-                                    value={String(subVal ?? '')}
-                                    onChange={(e) => {
-                                      const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
-                                      if (newData[idx] && newData[idx][key]) {
-                                        newData[idx][key][subKey] = e.target.value;
-                                        const finalData = Array.isArray(data) ? newData : newData[0];
-                                        handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
-                                      }
-                                    }}
-                                    onBlur={handleSaveCurrent}
-                                 /> 
-                              </div>
+                         {objectEntries.map(([subKey, subVal]) => (
+                           <div key={`${key}.${subKey}`} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
+                             <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
+                               <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(subKey)}>{getLabel(subKey)}</span>
+                             </div>
+                             <div className="sm:w-[65%] flex items-center relative">
+                               <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                               <input
+                                 type="text"
+                                 className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
+                                 placeholder="-"
+                                 value={String(subVal ?? '')}
+                                 onChange={(e) => {
+                                   const newData = JSON.parse(JSON.stringify(Array.isArray(data) ? data : [data]));
+                                   if (newData[idx] && newData[idx][key]) {
+                                     newData[idx][key][subKey] = e.target.value;
+                                     const finalData = Array.isArray(data) ? newData : newData[0];
+                                     handleJsonChange(fileId, JSON.stringify(finalData, null, 2));
+                                   }
+                                 }}
+                                 onBlur={handleSaveCurrent}
+                               />
+                             </div>
                            </div>
                          ))}
                        </div>
@@ -509,20 +622,44 @@ export default function CollectionDetailModal({
                    }
 
                    return ( 
-                     <div key={key} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
+                      <div key={key} className="flex flex-col sm:flex-row group hover:bg-slate-50/60 transition-colors">
                         <div className="sm:w-[35%] px-4 py-2 flex items-center bg-slate-50/10 border-r border-transparent sm:border-slate-50 group-hover:border-slate-100 transition-colors">
                             <span className="text-[11px] font-medium text-slate-500 truncate select-none" title={getLabel(key)}>{getLabel(key)}</span>
                         </div>
                         <div className="sm:w-[65%] flex items-center relative">
                            <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                           <input 
-                              type="text" 
-                              className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
-                              placeholder="-"
-                              value={val as string ?? ''}
-                              onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
-                              onBlur={handleSaveCurrent}
-                           /> 
+                           {/* 判断是否为长文本字段 */}
+                           {key === 'house_details' || key === 'modification_description' || key === 'damage_description' || key === 'description' ? (
+                              <textarea
+                                 className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
+                                 placeholder="-"
+                                 rows={3}
+                                 style={{ minHeight: '60px' }}
+                                 value={val as string ?? ''}
+                                 onInput={(e) => {
+                                    const target = e.currentTarget;
+                                    target.style.height = 'auto';
+                                    target.style.height = target.scrollHeight + 'px';
+                                 }}
+                                 ref={(el) => {
+                                    if (el) {
+                                       el.style.height = 'auto';
+                                       el.style.height = el.scrollHeight + 'px';
+                                    }
+                                 }}
+                                 onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
+                                 onBlur={handleSaveCurrent}
+                              />
+                           ) : (
+                              <input 
+                                 type="text" 
+                                 className="w-full h-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold"
+                                 placeholder="-"
+                                 value={val as string ?? ''}
+                                 onChange={(e) => handleFieldUpdate(idx, key, e.target.value)}
+                                 onBlur={handleSaveCurrent}
+                              />
+                           )}
                         </div>
                      </div>
                    );
@@ -955,6 +1092,7 @@ export default function CollectionDetailModal({
                       onSkillSelect={(skillName) => setSelectedSkill(skillName)}
                       showOnlyDeclarative={true}
                       groupFilter="info_collection"
+                      allowedSkills={allowedSkillsForNode}
                     />
                   </div>
 
@@ -1210,11 +1348,9 @@ export default function CollectionDetailModal({
                       className="w-full px-3 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white border border-transparent rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2 shadow-sm shadow-emerald-200"
                     >
                       <CheckCircle className="w-4 h-4" />
-                      {selectedFile?.confirmed
-                        ? "已完成确认"
-                        : isConfirming
+                      {isConfirming
                           ? "保存中..."
-                          : "已确认无误"}
+                          : "确认无误"}
                     </button>
                   </div>
                 </div>

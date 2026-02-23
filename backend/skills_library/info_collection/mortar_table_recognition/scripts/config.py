@@ -43,9 +43,14 @@ class Config:
         self.max_retries = int(os.getenv('MAX_RETRIES', '3'))
         self.timeout = int(os.getenv('TIMEOUT', '60'))
         self.batch_size = int(os.getenv('BATCH_SIZE', '10'))
+        # PDF 页面上限，避免整本 PDF 全量 OCR 导致耗时过长
+        self.max_pdf_pages = int(os.getenv('MORTAR_MAX_PDF_PAGES', '3'))
         
         # Poppler Path (for PDF conversion)
-        self.poppler_path = os.getenv('POPPLER_PATH', './poppler-24.08.0/Library/bin')
+        # Get backend root directory (up 4 levels from config.py)
+        backend_root = Path(__file__).parent.parent.parent.parent.parent
+        default_poppler = backend_root / 'poppler-windows' / 'Release-25.12.0-0' / 'poppler-25.12.0' / 'Library' / 'bin'
+        self.poppler_path = os.getenv('POPPLER_PATH', str(default_poppler))
         
         # Paths
         self.project_root = Path(__file__).parent.parent

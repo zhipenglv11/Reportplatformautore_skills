@@ -261,6 +261,7 @@ export default function App() {
                   <ReportEditor
                     key={`report-${currentProject.id}`}
                     projectId={currentProject.id}
+                    reportType={currentProject.reportType}
                     collectionNodes={collectionNodes}
                     initialNodes={reportNodes}
                     initialEdges={reportEdges}

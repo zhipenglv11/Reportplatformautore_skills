@@ -9,7 +9,7 @@ from services.skills.ingest_skill import IngestSkill
 from services.skills.parse_skill import ParseSkill
 from services.skills.mapping_skill import MappingSkill
 from services.skills.validation_skill import ValidationSkill
-from services.skills.chapter_generation_skill import ChapterGenerationSkill
+# from services.skills.chapter_generation_skill import ChapterGenerationSkill  # 已弃用，使用声明式技能
 from services.skills.template_profile_skill import TemplateProfileSkill
 
 # 声明式 Skills
@@ -34,7 +34,7 @@ class SkillRegistry:
             "parse": ParseSkill,
             "mapping": MappingSkill,
             "validation": ValidationSkill,
-            "chapter_generation": ChapterGenerationSkill,
+            # "chapter_generation": ChapterGenerationSkill,  # 已弃用，使用声明式技能
             "template_profile": TemplateProfileSkill,
         }
 

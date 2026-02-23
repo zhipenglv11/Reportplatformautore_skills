@@ -267,6 +267,7 @@ export default function DataCollectionEditor({
       formData.append('format', 'json');
       formData.append('project_id', projectId);
       formData.append('node_id', nodeId);
+      // 仅在用户点击“确认无误”后入库，解析阶段不自动入库
       formData.append('persist_result', 'false');
 
       try {
@@ -312,7 +313,6 @@ export default function DataCollectionEditor({
       const result = uploadResult.result || {};
       const records = Array.isArray(result.records) ? result.records : [];
       const success = !!result.success;
-      const confirmed = records.length > 0 && records.every((entry: any) => entry.status === 'success');
 
       return {
         ...item,
@@ -320,7 +320,8 @@ export default function DataCollectionEditor({
         error: success ? undefined : (result.error || 'Skill execution failed'),
         skill_result: result,
         commit_results: records,
-        confirmed,
+        // 解析完成后默认不自动确认，必须由用户手动点击“已确认无误”
+        confirmed: false,
         skill_name: skillName,
         source_hash: result.source_hash || item.source_hash,
       };
@@ -467,6 +468,14 @@ export default function DataCollectionEditor({
             { name: 'status', label: '处理状态', type: 'text', required: false },
             { name: 'notes', label: '备注信息', type: 'text', required: false },
           ];
+        case 'software-calculation':
+          return [
+            { name: 'mortar_strength_mpa', label: '砌筑砂浆抗压强度取值(MPa)', type: 'number', required: false },
+            { name: 'brick_strength_grade', label: '砌墙砖抗压强度等级', type: 'text', required: false },
+            { name: 'live_loads', label: '活载', type: 'text', required: false },
+            { name: 'dead_loads', label: '恒载(含自重)', type: 'text', required: false },
+            { name: 'load_combination_type', label: '荷载基本组合类型', type: 'text', required: false },
+          ];
         default:
           return [];
       }
@@ -483,6 +492,7 @@ export default function DataCollectionEditor({
         'site-inspection': '现场情况检查',
         'delegate-info': '委托方资料',
         'multi-doc-upload': '多文档智能上传',
+        'software-calculation': '软件计算结果',
       };
       return labels[dataType] || '数据节点';
     };

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     moonshot_base_url: str = "https://api.moonshot.cn/v1"
     qwen_api_key: str = ""  # DashScope API Key（可选）
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    poppler_bin_path: str = ""  # Poppler bin路径（可选）
+    poppler_bin_path: str = str(PROJECT_ROOT / "backend" / "poppler-windows" / "Release-25.12.0-0" / "poppler-25.12.0" / "Library" / "bin")  # Poppler bin路径
     env: str = "development"
     debug: bool = True
     

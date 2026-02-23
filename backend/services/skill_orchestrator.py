@@ -50,16 +50,18 @@ class SkillOrchestrator:
         
         # 文件类型到技能的映射规则
         self.file_type_to_skill = {
-            "concrete": "concrete-table-recognition",
-            "mortar": "concrete-table-recognition",  # 可以使用相同的技能
-            "brick": "concrete-table-recognition",  # 可以使用相同的技能
-            "software_result": "concrete-table-recognition",  # 或创建新的技能
+            "concrete": "concrete_table_recognition",
+            "mortar": "mortar_table_recognition",
+            "brick": "brick_table_recognition",
+            "software_result": "software_calculation_recognition",
         }
         
         # 技能描述映射（用于 LLM 识别）
         self.skill_descriptions = {
-            "concrete-table-recognition": "识别和提取混凝土、砂浆、砖强度等检测表格数据",
-            # 可以添加更多技能描述
+            "concrete_table_recognition": "识别并提取混凝土强度检测表格数据",
+            "mortar_table_recognition": "识别并提取砂浆强度检测表格数据",
+            "brick_table_recognition": "识别并提取砖强度检测表格数据",
+            "software_calculation_recognition": "识别并提取软件计算结果参数",
         }
     
     async def classify_file(
@@ -83,7 +85,10 @@ class SkillOrchestrator:
         system_prompt = """你是一个专业的文件类型识别助手。你的任务是识别上传的文件类型，并确定应该使用哪个技能来处理它。
 
 可用的技能：
-1. concrete-table-recognition: 用于识别和提取混凝土、砂浆、砖强度等检测表格数据
+1. concrete_table_recognition: 用于识别和提取混凝土强度检测表格数据
+2. mortar_table_recognition: 用于识别和提取砂浆强度检测表格数据
+3. brick_table_recognition: 用于识别和提取砖强度检测表格数据
+4. software_calculation_recognition: 用于识别和提取软件计算结果参数
 
 文件类型包括：
 - concrete: 混凝土强度检测表（如回弹检测记录表、强度结果表等）
@@ -95,7 +100,7 @@ class SkillOrchestrator:
 请根据文件名和内容（如果有）识别文件类型，并返回 JSON 格式：
 {
   "file_type": "concrete|mortar|brick|software_result|other",
-  "skill_name": "concrete-table-recognition|null",
+  "skill_name": "concrete_table_recognition|mortar_table_recognition|brick_table_recognition|software_calculation_recognition|null",
   "confidence": 0.0-1.0,
   "reasoning": "识别理由"
 }"""
@@ -165,22 +170,22 @@ class SkillOrchestrator:
         # 规则匹配
         if any(keyword in file_name_lower for keyword in ["混凝土", "concrete", "回弹", "rebound"]):
             file_type = "concrete"
-            skill_name = "concrete-table-recognition"
+            skill_name = "concrete_table_recognition"
             confidence = 0.8
             reasoning = "文件名包含混凝土相关关键词"
         elif any(keyword in file_name_lower for keyword in ["砂浆", "mortar"]):
             file_type = "mortar"
-            skill_name = "concrete-table-recognition"
+            skill_name = "mortar_table_recognition"
             confidence = 0.8
             reasoning = "文件名包含砂浆相关关键词"
         elif any(keyword in file_name_lower for keyword in ["砖", "brick"]):
             file_type = "brick"
-            skill_name = "concrete-table-recognition"
+            skill_name = "brick_table_recognition"
             confidence = 0.8
             reasoning = "文件名包含砖相关关键词"
         elif any(keyword in file_name_lower for keyword in ["软件", "software", "计算", "result"]):
             file_type = "software_result"
-            skill_name = "concrete-table-recognition"
+            skill_name = "software_calculation_recognition"
             confidence = 0.7
             reasoning = "文件名包含软件计算结果相关关键词"
         else:

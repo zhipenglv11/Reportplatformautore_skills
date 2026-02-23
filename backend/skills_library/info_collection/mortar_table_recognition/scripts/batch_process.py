@@ -8,10 +8,10 @@ import logging
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from .config import Config
-from .qwen_client import QwenVLClient
-from .pdf_processor import PDFProcessor
-from .formatter import DataFormatter
+from scripts.config import Config
+from scripts.qwen_client import QwenVLClient
+from scripts.pdf_processor import PDFProcessor
+from scripts.formatter import DataFormatter
 from skills.extractor import MortarExtractor
 
 
@@ -84,7 +84,8 @@ def batch_process(
             logger.info(f"Converting PDF: {file_path}")
             image_paths = pdf_processor.pdf_to_images(
                 str(file_path),
-                output_dir=str(config.temp_dir)
+                output_dir=str(config.temp_dir),
+                page_range=(1, max(1, int(getattr(config, "max_pdf_pages", 3))))
             )
             all_image_paths.extend(image_paths)
         else:

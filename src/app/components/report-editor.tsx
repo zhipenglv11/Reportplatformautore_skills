@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+﻿import { useCallback, useState, useEffect, useRef } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -10,6 +10,7 @@ import ReactFlow, {
   NodeTypes,
   useReactFlow,
   ReactFlowProvider,
+  SelectionMode,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import ReportNode from "./nodes/report-node";
@@ -17,7 +18,7 @@ import NodeSidebar from "./node-sidebar";
 import { ProjectSidebar } from "./project-sidebar";
 import ReportNodeEditor from "./report-node-editor";
 import { ReportPreview } from "./report-preview"; // Import the new component
-import { FileText, Sparkles, X, GripHorizontal } from "lucide-react";
+import { FileText, ChevronLeft, ChevronRight, Eye, RotateCcw, Trash2 } from "lucide-react";
 
 const nodeTypes: NodeTypes = {
   report: ReportNode,
@@ -44,6 +45,7 @@ function FitView() {
 
 interface ReportEditorProps {
   projectId: string;
+  reportType?: string;
   collectionNodes: Node[];
   initialNodes: Node[];
   initialEdges: Edge[];
@@ -51,14 +53,34 @@ interface ReportEditorProps {
   onEdgesChange: (edges: Edge[]) => void;
 }
 
+interface ReportGenerationSnapshot {
+  id: string;
+  createdAt: string;
+  reportType: string;
+  chapters: any[];
+  nodeSnapshot: Node[];
+  chapterCount: number;
+}
+
 function ReportEditorContent({
   projectId,
+  reportType,
   collectionNodes,
   initialNodes,
   initialEdges,
   onNodesChange: onNodesChangeProp,
   onEdgesChange: onEdgesChangeProp,
 }: ReportEditorProps) {
+  const getDefaultReferenceByReportType = useCallback((type?: string) => {
+    const mapping: Record<string, { code: string; name: string }> = {
+      "民用建筑可靠性鉴定": { code: "GB 50292-2015", name: "民用建筑可靠性鉴定标准" },
+      "危险房屋鉴定": { code: "JGJ 125-2016", name: "危险房屋鉴定标准" },
+      "抗震鉴定": { code: "GB 50023-2009", name: "建筑抗震鉴定标准" },
+      "主体结构施工质量鉴定": { code: "GB 50204-2015", name: "混凝土结构工程施工质量验收规范" },
+    };
+    return mapping[type || ""] || { code: "JGJ 125-2016", name: "危险房屋鉴定标准" };
+  }, []);
+
   const [nodes, setNodes, onNodesChange] =
     useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] =
@@ -86,12 +108,42 @@ function ReportEditorContent({
 
   const [isReportGenerating, setIsReportGenerating] = useState(false);
   const [reportChapters, setReportChapters] = useState<any[]>([]);
+  const [reportHistory, setReportHistory] = useState<ReportGenerationSnapshot[]>([]);
+  const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // 使用 ref 来跟踪是否是内部更新，避免循环同步
   const isInternalUpdateRef = useRef(false);
   const initialNodesRef = useRef(initialNodes);
   const initialEdgesRef = useRef(initialEdges);
+
+  const historyStorageKey = `project_${projectId}_report_generation_history`;
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(historyStorageKey);
+      if (!raw) {
+        setReportHistory([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setReportHistory(parsed);
+      } else {
+        setReportHistory([]);
+      }
+    } catch {
+      setReportHistory([]);
+    }
+  }, [historyStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(historyStorageKey, JSON.stringify(reportHistory));
+    } catch {
+      // ignore storage write errors
+    }
+  }, [historyStorageKey, reportHistory]);
 
   // 处理编辑器拖动
   useEffect(() => {
@@ -241,11 +293,11 @@ function ReportEditorContent({
     "危险房屋鉴定": [
       "一、基本情况",
       "二、房屋概况",
-      "三、鉴定内容和方法、主要检测仪器设备及原始记录一览",
+      "三、鉴定内容和方法及原始记录一览表",
       "四、检测鉴定依据",
       "五、检查和检测情况",
       "六、复核验算",
-      "七、分析说明",
+      "七、分析评述",
       "八、鉴定意见及处理建议"
     ],
     "标准结构检测报告": [
@@ -330,6 +382,65 @@ function ReportEditorContent({
     ]
   };
 
+  const getTemplateStyleForTitle = (title: string) => {
+    if (title.includes("房屋概况")) {
+      return "house_overview";
+    }
+    if (title.includes("基本情况")) {
+      return "basic_situation";
+    }
+    if (title.includes("鉴定内容和方法") && title.includes("原始记录")) {
+      return "inspection_content_and_methods";
+    }
+    if (title.includes("检测鉴定依据") || title.includes("鉴定依据") || title.includes("检测依据")) {
+      return "inspection_basis";
+    }
+    if (title.includes("检查情况") || title.includes("现场检查") || title.includes("检查和检测情况")) {
+      return "detailed_inspection";
+    }
+    if (title.includes("荷载及计算参数取值")) {
+      return "load_calc_params";
+    }
+    if (title.includes("承载能力复核验算")) {
+      return "bearing_capacity_review";
+    }
+    if (title.includes("分析说明") || title.includes("分析评述")) {
+      return "analysis_explanation";
+    }
+    if (title.includes("鉴定意见") || title.includes("处理建议")) {
+      return "opinion_and_suggestions";
+    }
+    return "text_table_1";
+  };
+
+  const getDefaultSourceForTitle = (title: string) => {
+    if (title.includes("房屋概况")) {
+      return "scope_house_overview";
+    }
+    if (title.includes("基本情况")) {
+      return "scope_basic_situation";
+    }
+    if (title.includes("检测鉴定依据") || title.includes("鉴定依据") || title.includes("检测依据")) {
+      return "scope_inspection_basis";
+    }
+    if (title.includes("检查情况") || title.includes("现场检查") || title.includes("检查和检测情况")) {
+      return "scope_detailed_inspection";
+    }
+    if (title.includes("荷载及计算参数取值")) {
+      return "scope_load_calc_params";
+    }
+    if (title.includes("承载能力复核验算")) {
+      return "scope_bearing_capacity_review";
+    }
+    if (title.includes("分析说明") || title.includes("分析评述")) {
+      return "scope_analysis_explanation";
+    }
+    if (title.includes("鉴定意见") || title.includes("处理建议")) {
+      return "scope_opinion_and_suggestions";
+    }
+    return null;
+  };
+
   const addNode = useCallback(
     (chapterTitle: string) => {
       // 检查是否是模板
@@ -340,7 +451,7 @@ function ReportEditorContent({
         if (chapters && chapters.length > 0) {
           // 创建多个节点
           const newNodes = chapters.map((chapter, index) => {
-            // 从章节标题中提取编号（如"一、"、"二、"等）
+            // 从章节标题中提取编号(如"一、"、"二、"等)
             const chapterMatch = chapter.match(/^([一二三四五六七八九十]+)、/);
             const chapterNumber = chapterMatch ? chapterMatch[1] : `${index + 1}`;
             const title = chapter.replace(/^[一二三四五六七八九十]+、/, "");
@@ -359,15 +470,24 @@ function ReportEditorContent({
                 prompt: "",
                 references: [],
                 templates: [],
-                templateStyle: "text_table_1",
+                templateStyle: getTemplateStyleForTitle(title || chapter),
+                sourceNodeId: getDefaultSourceForTitle(title || chapter),
                 referenceSpecType: "system",
-                referenceSpec: "JGJ/T 23-2011",
+                referenceSpec: (title || chapter).includes("检测鉴定依据")
+                  ? getDefaultReferenceByReportType(reportType).code
+                  : "JGJ/T 23-2011",
+                systemReferenceCode: (title || chapter).includes("检测鉴定依据")
+                  ? getDefaultReferenceByReportType(reportType).code
+                  : "JGJ/T 23-2011",
+                systemReferenceName: (title || chapter).includes("检测鉴定依据")
+                  ? getDefaultReferenceByReportType(reportType).name
+                  : "",
                 status: 'idle',
               },
             };
           });
           
-          // 标记为内部更新，避免触发循环同步
+          // 标记为内部更新,避免触发循环同步
           isInternalUpdateRef.current = true;
           setNodes((nds) => [...nds, ...newNodes]);
           return;
@@ -396,18 +516,27 @@ function ReportEditorContent({
           prompt: "",
           references: [],
           templates: [],
-          templateStyle: "text_table_1",
+          templateStyle: getTemplateStyleForTitle(title),
+          sourceNodeId: getDefaultSourceForTitle(title),
           referenceSpecType: "system",
-          referenceSpec: "JGJ/T 23-2011",
+          referenceSpec: title.includes("检测鉴定依据")
+            ? getDefaultReferenceByReportType(reportType).code
+            : "JGJ/T 23-2011",
+          systemReferenceCode: title.includes("检测鉴定依据")
+            ? getDefaultReferenceByReportType(reportType).code
+            : "JGJ/T 23-2011",
+          systemReferenceName: title.includes("检测鉴定依据")
+            ? getDefaultReferenceByReportType(reportType).name
+            : "",
           status: 'idle', // idle, running, completed
         },
       };
       
-      // 标记为内部更新，避免触发循环同步
+      // 标记为内部更新,避免触发循环同步
       isInternalUpdateRef.current = true;
       setNodes((nds) => [...nds, newNode]);
     },
-    [nodes.length, setNodes],
+    [nodes.length, setNodes, getDefaultReferenceByReportType, getDefaultSourceForTitle, reportType],
   );
 
   // 处理章节选中和定位
@@ -420,7 +549,7 @@ function ReportEditorContent({
           zoom: 1.2,
           duration: 800,
         });
-        // 选中状态更新不需要标记为内部更新，这是用户操作
+        // 閫変腑鐘舵€佹洿鏂颁笉闇€瑕佹爣璁颁负鍐呴儴鏇存柊锛岃繖鏄敤鎴锋搷浣?
         setNodes((nds) =>
           nds.map((n) => ({
             ...n,
@@ -432,21 +561,21 @@ function ReportEditorContent({
     [getNode, setCenter, setNodes],
   );
 
-  // 停止报告生成
+  // 鍋滄鎶ュ憡鐢熸垚
   const handleStopGeneration = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
     setIsReportGenerating(false);
-    // 将所有 running 状态的节点重置为 idle
-    // 这是用户操作，应该同步到父组件
+    // 灏嗘墍鏈?running 鐘舵€佺殑鑺傜偣閲嶇疆涓?idle
+    // 杩欐槸鐢ㄦ埛鎿嶄綔锛屽簲璇ュ悓姝ュ埌鐖剁粍浠?
     setNodes((nds) => nds.map(n => 
       n.data.status === 'running' ? { ...n, data: { ...n.data, status: 'idle' } } : n
     ));
   }, [setNodes]);
 
-  // 模拟报告生成过程
+  // 妯℃嫙鎶ュ憡鐢熸垚杩囩▼
   const handleGenerateReport = async () => {
     // ???? AbortController
     abortControllerRef.current = new AbortController();
@@ -483,7 +612,7 @@ function ReportEditorContent({
           node.data?.referenceCode ||
           node.data?.systemReferenceCode ||
           "JGJ/T 23-2011";
-        // 获取数据源节点ID（用于查询数据）
+        // 鑾峰彇鏁版嵁婧愯妭鐐笽D锛堢敤浜庢煡璇㈡暟鎹級
         const sourceNodeId = node.data?.sourceNodeId || node.data?.source_node_id || null;
         
         const ruleId =
@@ -492,32 +621,51 @@ function ReportEditorContent({
 
         const templateStyle = node.data?.templateStyle || node.data?.template_style || "concrete_strength_table";
         
-        // 根据 templateStyle 自动映射 dataset_key
+        // 根据 templateStyle 自动映射 dataset_key(已更新为新系统)
         const datasetKeyMap: Record<string, string> = {
-          'concrete_strength_full': 'concrete_strength_comprehensive',  // 新的统一规则
-          'concrete_strength_table': 'concrete_rebound_tests',  // 表格输出（旧）
-          'concrete_strength_desc': 'concrete_strength_description',  // 描述文本输出（旧）
-          'mortar_strength_data': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
-          'mortar_strength_desc': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
-          'brick_strength_table': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
-          'brick_strength_desc': 'concrete_rebound_tests', // TODO: 需要定义对应的 dataset_key
+          'concrete_strength_full': 'concrete_strength',  // 混凝土强度(新系统)
+          'concrete_strength_table': 'concrete_strength',  // 混凝土强度表格(兼容旧系统)
+          'concrete_strength_desc': 'concrete_strength',  // 混凝土强度描述(兼容旧系统)
+          'mortar_strength_data': 'mortar_strength',  // 砂浆强度数据
+          'mortar_strength_desc': 'mortar_strength',  // 砂浆强度描述
+          'brick_strength_table': 'brick_strength',  // 砖强度表格
+          'brick_strength_desc': 'brick_strength',  // 砖强度描述
+          'inspection_content_and_methods': 'inspection_content_and_methods',  // 鉴定内容和方法及原始记录一览表
+          'inspection_basis': 'inspection_basis',  // 检测鉴定依据
+          'detailed_inspection': 'detailed_inspection',  // 详细检查情况
+          'basic_situation': 'basic_situation',  // 基本情况
+          'house_overview': 'house_overview',  // 房屋概况
+          'load_calc_params': 'load_calc_params',  // 荷载及计算参数取值
+          'bearing_capacity_review': 'bearing_capacity_review',  // 承载能力复核验算
+          'analysis_explanation': 'analysis_explanation',  // 分析说明
+          'opinion_and_suggestions': 'opinion_and_suggestions',  // 鉴定意见及处理建议
         };
-        const datasetKey = node.data?.datasetKey || node.data?.dataset_key || datasetKeyMap[templateStyle] || "concrete_rebound_tests";
+        const datasetKey = node.data?.datasetKey || node.data?.dataset_key || datasetKeyMap[templateStyle] || "concrete_strength";
+
+        const chapterNumber = node.data?.chapterNumber || "";
+        const chapterTitle = node.data?.label || "";
 
         const payload = {
           project_id: projectId,
           chapter_config: {
-            node_id: node.id, // 报告节点ID（用于标识章节）
-            sourceNodeId: sourceNodeId, // 数据源节点ID或检测大类（scope_开头）
-            title: node.data?.label,
+            node_id: node.id, // 报告节点ID(用于标识章节)
+            sourceNodeId: sourceNodeId, // 数据源节点ID或检测大类(scope_开头)
+            title: chapterTitle,
             dataset_key: datasetKey,
             table_id: node.data?.tableId || node.data?.table_id || "table_7_rebound",
             template_style: templateStyle,
             reference_spec_type: referenceSpecType,
             reference_spec: referenceSpec,
             rule_id: ruleId,
+            context: {
+              report_type: reportType || "",
+              reference_spec: referenceSpec,
+              chapter_number: chapterNumber,
+            },
           },
-          project_context: {},
+          project_context: {
+            report_type: reportType || "",
+          },
         };
 
         const response = await fetch("/api/report/generate", {
@@ -551,13 +699,22 @@ function ReportEditorContent({
     if (!signal.aborted) {
       setIsReportGenerating(false);
       setReportChapters(nextChapters);
+      const snapshot: ReportGenerationSnapshot = {
+        id: `report-snapshot-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        reportType: reportType || "",
+        chapters: nextChapters,
+        nodeSnapshot: JSON.parse(JSON.stringify(nodes)),
+        chapterCount: nextChapters.length,
+      };
+      setReportHistory((prev) => [snapshot, ...prev].slice(0, 50));
       setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 500);
     }
 
     abortControllerRef.current = null;
   };
 
-  // MiniMap 节点颜色函数
+  // MiniMap 鑺傜偣棰滆壊鍑芥暟
   const getMiniMapNodeColor = (node: Node) => {
     if (node.type !== "report") return "#8b5cf6";
 
@@ -565,7 +722,7 @@ function ReportEditorContent({
     if (!chapterNumber || chapterNumber.trim() === "")
       return "#3b82f6";
 
-    // 提取第一个数字
+    // 鎻愬彇绗竴涓暟瀛?
     const match = chapterNumber.match(/^(\d+)/);
     if (match) {
       const topLevel = parseInt(match[1], 10);
@@ -584,24 +741,24 @@ function ReportEditorContent({
       return colorMap[(topLevel - 1) % colorMap.length];
     }
 
-    return "#3b82f6"; // 默认蓝色
+    return "#3b82f6"; // 榛樿钃濊壊
   };
 
-  // 磁吸功能 - 节点拖动结束时对齐
+  // 纾佸惛鍔熻兘 - 鑺傜偣鎷栧姩缁撴潫鏃跺榻?
   const handleNodeDragStop = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      const SNAP_DISTANCE = 50; // 吸附检测距离
-      const SNAP_GAP = 30; // 对齐后保持的间距
-      const ALIGNMENT_THRESHOLD = 20; // 对齐阈值
+      const SNAP_DISTANCE = 50; // 鍚搁檮妫€娴嬭窛绂?
+      const SNAP_GAP = 30; // 瀵归綈鍚庝繚鎸佺殑闂磋窛
+      const ALIGNMENT_THRESHOLD = 20; // 瀵归綈闃堝€?
 
-      const nodeWidth = 320; // 节点宽度
-      const nodeHeight = 92; // 节点高度（估算）
+      const nodeWidth = 320; // 鑺傜偣瀹藉害
+      const nodeHeight = 92; // 鑺傜偣楂樺害锛堜及绠楋級
 
       const draggedNode = node;
       let snappedX = draggedNode.position.x;
       let snappedY = draggedNode.position.y;
 
-      // 遍历所有其他节点，寻找吸附目标
+      // 閬嶅巻鎵€鏈夊叾浠栬妭鐐癸紝瀵绘壘鍚搁檮鐩爣
       nodes.forEach((otherNode) => {
         if (otherNode.id === draggedNode.id) return;
 
@@ -612,7 +769,7 @@ function ReportEditorContent({
           draggedNode.position.y - otherNode.position.y,
         );
 
-        // 水平对齐检测（上下排列）
+        // 姘村钩瀵归綈妫€娴嬶紙涓婁笅鎺掑垪锛?
         if (dx < ALIGNMENT_THRESHOLD) {
           const bottomOfOther =
             otherNode.position.y + nodeHeight;
@@ -637,7 +794,7 @@ function ReportEditorContent({
           }
         }
 
-        // 垂直对齐检测（左右排列）
+        // 鍨傜洿瀵归綈妫€娴嬶紙宸﹀彸鎺掑垪锛?
         if (dy < ALIGNMENT_THRESHOLD) {
           const rightOfOther = otherNode.position.x + nodeWidth;
           const leftOfDragged = draggedNode.position.x;
@@ -661,7 +818,7 @@ function ReportEditorContent({
           }
         }
 
-        // 中心对齐检测
+        // 涓績瀵归綈妫€娴?
         const centerXDragged =
           draggedNode.position.x + nodeWidth / 2;
         const centerYDragged =
@@ -707,7 +864,7 @@ function ReportEditorContent({
   // Ref for the main content area to calculate precise resize widths
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // 处理预览面板高度调整
+  // 澶勭悊棰勮闈㈡澘楂樺害璋冩暣
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizingPreview || !containerRef.current) return;
@@ -717,7 +874,7 @@ function ReportEditorContent({
       const newHeightPixels = e.clientY - containerRect.top;
       const newHeightPercent = (newHeightPixels / containerRect.height) * 100;
 
-      // 限制高度在30%到80%之间
+      // 闄愬埗楂樺害鍦?0%鍒?0%涔嬮棿
       const clampedHeight = Math.max(
         30,
         Math.min(80, newHeightPercent),
@@ -747,16 +904,40 @@ function ReportEditorContent({
     };
   }, [isResizingPreview]);
 
-  // 当预览面板显示状态改变时，自动调整视图以展示所有节点
+  // 褰撻瑙堥潰鏉挎樉绀虹姸鎬佹敼鍙樻椂锛岃嚜鍔ㄨ皟鏁磋鍥句互灞曠ず鎵€鏈夎妭鐐?
   useEffect(() => {
     if (showGenerateModal) {
-      // 稍微延迟以等待布局更新
+      // 绋嶅井寤惰繜浠ョ瓑寰呭竷灞€鏇存柊
       const timer = setTimeout(() => {
         fitView({ duration: 600, padding: 0.2 });
       }, 300);
       return () => clearTimeout(timer);
     }
   }, [showGenerateModal, fitView]);
+
+  const handleLoadHistoryPreview = useCallback((snapshot: ReportGenerationSnapshot) => {
+    setReportChapters(snapshot.chapters || []);
+    setIsReportGenerating(false);
+    setShowGenerateModal(true);
+  }, []);
+
+  const handleRestoreNodeConfig = useCallback((snapshot: ReportGenerationSnapshot) => {
+    if (!Array.isArray(snapshot.nodeSnapshot)) return;
+    isInternalUpdateRef.current = true;
+    setNodes(snapshot.nodeSnapshot);
+    setSelectedNode(null);
+    setIsEditorOpen(false);
+  }, [setNodes]);
+
+  const handleClearHistory = useCallback(() => {
+    setReportHistory([]);
+  }, []);
+
+  const handleDeleteHistoryItem = useCallback((itemId: string) => {
+    setReportHistory((history) => history.filter((item) => item.id !== itemId));
+  }, []);
+
+  const historyCountLabel = reportHistory.length > 99 ? "99+" : String(reportHistory.length);
 
   return (
     <div className="flex h-full w-full bg-slate-50 relative">
@@ -794,7 +975,7 @@ function ReportEditorContent({
               className="absolute left-0 right-0 bottom-0 h-2 cursor-row-resize hover:bg-blue-100 transition-colors z-20 flex items-center justify-center group"
               onMouseDown={() => setIsResizingPreview(true)}
             >
-              {/* 中间的拖动指示器 - 拉到底时消失 */}
+              {/* 涓棿鐨勬嫋鍔ㄦ寚绀哄櫒 - 鎷夊埌搴曟椂娑堝け */}
               <div 
                 className={`flex flex-col items-center gap-0.5 transition-opacity duration-200 ${previewHeight >= 78 ? 'opacity-0' : 'opacity-100'}`}
               >
@@ -826,7 +1007,7 @@ function ReportEditorContent({
             className="bg-slate-50"
             selectionOnDrag
             panOnDrag={[1, 2]}
-            selectionMode="partial"
+            selectionMode={SelectionMode.Partial}
             multiSelectionKeyCode="Shift"
             nodesConnectable={false}
             edgesUpdatable={false}
@@ -851,6 +1032,89 @@ function ReportEditorContent({
               <div className="text-center">
                 <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
                 <p className="text-slate-400 text-sm">请从左侧选择报告模板或添加章节节点</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Collapsible History Sidebar (inside 报告生成功能) */}
+      <div
+        className={`h-full border-l border-slate-200 bg-white transition-all duration-200 ${
+          isHistorySidebarOpen ? "w-80" : "w-10"
+        }`}
+      >
+        <div className="h-full flex flex-col">
+          <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2">
+            {isHistorySidebarOpen && (
+              <div className="text-sm font-semibold text-slate-700 px-1">报告回溯</div>
+            )}
+            <button
+              className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
+              onClick={() => setIsHistorySidebarOpen((v) => !v)}
+              title={isHistorySidebarOpen ? "收起" : "展开"}
+            >
+              {isHistorySidebarOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
+
+          {isHistorySidebarOpen && (
+            <>
+              <div className="px-3 py-2 border-b border-slate-100">
+                <span className="text-xs text-slate-500">共 {reportHistory.length} 份</span>
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                {reportHistory.length === 0 ? (
+                  <div className="text-xs text-slate-400 px-2 py-4">暂无历史报告</div>
+                ) : (
+                  reportHistory.map((item, index) => (
+                    <div key={item.id} className="border border-slate-200 rounded-lg p-2 space-y-2">
+                      <div className="text-xs text-slate-700 font-medium">
+                        第 {reportHistory.length - index} 次生成
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        {new Date(item.createdAt).toLocaleString("zh-CN")}
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        章节数：{item.chapterCount} {item.reportType ? `| 类型：${item.reportType}` : ""}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-1"
+                          onClick={() => handleLoadHistoryPreview(item)}
+                        >
+                          <Eye className="w-3 h-3" />
+                          查看
+                        </button>
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
+                          onClick={() => handleRestoreNodeConfig(item)}
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          恢复节点
+                        </button>
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1"
+                          onClick={() => handleDeleteHistoryItem(item.id)}
+                          title="删除此记录"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+
+          {!isHistorySidebarOpen && (
+            <div className="flex-1 flex items-start justify-center pt-3">
+              <div
+                className="min-w-[22px] h-[22px] px-1 rounded-full bg-slate-900 text-white text-[10px] leading-[22px] text-center font-semibold"
+                title={`已生成 ${reportHistory.length} 份报告`}
+              >
+                {historyCountLabel}
               </div>
             </div>
           )}
@@ -882,6 +1146,7 @@ function ReportEditorContent({
             }}
             onHeaderMouseDown={handleEditorHeaderMouseDown}
             collectionNodes={collectionNodes}
+            reportType={reportType}
           />
           {/* Resize Handle - Bottom Right Corner */}
           <div
@@ -889,7 +1154,7 @@ function ReportEditorContent({
             onMouseDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              // 记录初始鼠标位置和窗口尺寸
+              // 璁板綍鍒濆榧犳爣浣嶇疆鍜岀獥鍙ｅ昂瀵?
               setResizeStart({
                 mouseX: e.clientX,
                 mouseY: e.clientY,
@@ -914,3 +1179,5 @@ export default function ReportEditor(props: ReportEditorProps) {
     </ReactFlowProvider>
   );
 }
+
+

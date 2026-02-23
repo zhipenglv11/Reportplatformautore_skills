@@ -1,0 +1,32 @@
+[
+  {
+    "file": "backend\\tmp_software_calc_test.txt",
+    "success": true,
+    "type": "software_calculation_results",
+    "data": {
+      "meta": {
+        "source_file": "tmp_software_calc_test.txt",
+        "parser": "software_calculation_recognition_v1"
+      },
+      "mortar_strength_mpa": 1.1,
+      "brick_strength_grade": "MU10.0",
+      "live_loads": {
+        "non_accessible_roof": 0.5,
+        "living_room_bedroom_kitchen_wc": 2.0,
+        "stair_and_balcony": 2.5
+      },
+      "dead_loads": {
+        "roof": 0.5,
+        "floor_prefab": 3.0,
+        "stair_room": 6.0
+      },
+      "load_combination_type": "1.2D+1.4L",
+      "wind_snow_terrain": {
+        "basic_wind_pressure": null,
+        "basic_snow_pressure": null,
+        "terrain_category": null
+      },
+      "defaults_applied": []
+    }
+  }
+]

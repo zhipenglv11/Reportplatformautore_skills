@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
@@ -18,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 挂载路由（统一�?api前缀�?
+# 挂载路由(统一加api前缀)
 from api import routes
 from api import collection_routes
 from api import declarative_skill_routes

@@ -23,9 +23,19 @@ class ScriptRunner:
         self._python_executable = self._resolve_python_executable()
 
     def _resolve_python_executable(self) -> str:
+        """解析 Python 可执行文件路径
+        
+        优先级：
+        1. 环境变量 SKILL_PYTHON
+        2. 当前 skill 目录下的虚拟环境 (.venv)
+        3. 项目根目录下的虚拟环境 (.venv) - 适用于没有独立虚拟环境的 skills
+        4. 系统 Python (sys.executable)
+        """
         env_python = os.getenv("SKILL_PYTHON")
         if env_python:
             return env_python
+        
+        # 1. 查找当前 skill 目录下的虚拟环境
         venv_candidates = [
             self.skill_dir / ".venv" / "Scripts" / "python.exe",
             self.skill_dir / "venv" / "Scripts" / "python.exe",
@@ -35,6 +45,19 @@ class ScriptRunner:
         for candidate in venv_candidates:
             if candidate.exists():
                 return str(candidate)
+        
+        # 2. 查找项目根目录下的虚拟环境（向上3级）
+        # backend/skills_library/info_collection/skill_name -> backend
+        project_root = self.skill_dir.parent.parent.parent.parent
+        root_venv_candidates = [
+            project_root / ".venv" / "Scripts" / "python.exe",
+            project_root / ".venv" / "bin" / "python",
+        ]
+        for candidate in root_venv_candidates:
+            if candidate.exists():
+                return str(candidate)
+        
+        # 3. 使用系统 Python
         return sys.executable
 
     def run_script(

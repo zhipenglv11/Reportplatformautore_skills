@@ -1,33 +1,49 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
+"""
+⚠️ 已弃用 - DEPRECATED ⚠️
 
+本文件已被新的声明式技能系统替代。
+请使用以下技能：
+- concrete_strength: skills_library/generation/inspection/material_strength/subskills/concrete_strength/impl/parse.py
+- brick_strength: skills_library/generation/inspection/material_strength/subskills/brick_strength/impl/parse.py
+- mortar_strength: skills_library/generation/inspection/material_strength/subskills/mortar_strength/impl/parse.py
 
-from dataclasses import dataclass
-from datetime import date
-from pathlib import Path
-import re
-from typing import Any, Dict, List, Optional
+如需恢复此文件，请从 git 历史记录中检出。
 
-import yaml
+最后更新: 2026-01-31
+原因: 迁移到声明式技能系统，支持更灵活的报告生成
+"""
 
-from models.db import fetch_professional_data
-
-
-@dataclass
-class ChapterResult:
-    chapter_id: str
-    title: str
-    template_style: str
-    reference_spec_type: str
-    reference_spec: str
-    blocks: List[Dict[str, Any]]
-    summary: Dict[str, Any]
-    evidence_refs: List[Dict[str, Any]]
-
-
-class ChapterGenerationSkill:
-    """Generate chapter JSON from professional_data records."""
-
+# 保留此文件以避免潜在的导入错误，但所有功能已移至新系统
+# from __future__ import annotations
+# 
+# 
+# from dataclasses import dataclass
+# from datetime import date
+# from pathlib import Path
+# import re
+# from typing import Any, Dict, List, Optional
+# 
+# import yaml
+# 
+# from models.db import fetch_professional_data
+# 
+# 
+# @dataclass
+# class ChapterResult:
+#     chapter_id: str
+#     title: str
+#     template_style: str
+#     reference_spec_type: str
+#     reference_spec: str
+#     blocks: List[Dict[str, Any]]
+#     summary: Dict[str, Any]
+#     evidence_refs: List[Dict[str, Any]]
+# 
+# 
+# class ChapterGenerationSkill:
+#     """Generate chapter JSON from professional_data records."""
+# 
     TABLE7_COLUMNS = [
         {"key": "index", "label": "序号"},
         {"key": "position", "label": "抽测部位"},
