@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+﻿import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Image as ImageIcon, FileText, Download, BarChart3, CheckCircle, AlertCircle, Loader2, Move, Settings, Database, Trash2, MessageSquare, ZoomIn, ZoomOut, RotateCcw, Sparkles, Code, LayoutList } from 'lucide-react';
 import SkillSelector from './skill-selector';
 
@@ -49,7 +49,7 @@ interface CollectionDetailModalProps {
     nodeId: string;
     nodeLabel: string;
     analyzedAt: string;
-    jsonData: any; // 原始JSON format is preserved on save
+    jsonData: any; // 鍘熷JSON format is preserved on save
   } | null;
   onUpload: (nodeId: string, nodeLabel: string, prompt?: string) => void;
   onAnalyze: (
@@ -59,7 +59,7 @@ interface CollectionDetailModalProps {
   ) => Promise<void>;
   onRemoveFile: (fileId: string) => void;
   onUpdateAnalysisResult?: (fileId: string, data: any[]) => void;
-  projectId?: string; // 项目ID
+  projectId?: string; // 椤圭洰ID
 }
 
 export default function CollectionDetailModal({
@@ -77,7 +77,7 @@ export default function CollectionDetailModal({
   const [middlePanelOffset, setMiddlePanelOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const [pdfZoom, setPdfZoom] = useState(1); // PDF缩放比例，默认100%
+  const [pdfZoom, setPdfZoom] = useState(1); // PDF缂╂斁姣斾緥锛岄粯璁?00%
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [isExecutingSkill, setIsExecutingSkill] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -98,7 +98,7 @@ export default function CollectionDetailModal({
   const allowedSkillsForNode = skillAllowlistByNodeType[node?.data?.type] || [];
   const preferredSkillForNode = preferredSkillByNodeType[node?.data?.type];
 
-  // 当文件列表变化时，更新选中文件
+  // 褰撴枃浠跺垪琛ㄥ彉鍖栨椂锛屾洿鏂伴€変腑鏂囦欢
   useEffect(() => {
     if (uploadedFiles.length === 0) {
       setSelectedFile(null);
@@ -121,7 +121,7 @@ export default function CollectionDetailModal({
     }
   }, [uploadedFiles, selectedFile?.id]);
 
-  // 当切换文件时，重置PDF缩放比例
+  // 褰撳垏鎹㈡枃浠舵椂锛岄噸缃甈DF缂╂斁姣斾緥
   useEffect(() => {
     setPdfZoom(1);
   }, [selectedFile?.id]);
@@ -133,14 +133,14 @@ export default function CollectionDetailModal({
     }
   }, [preferredSkillForNode, selectedSkill, node?.id]);
 
-  const MIDDLE_PANEL_WIDTH = 340; // 中间栏固定宽度
-  const MIN_SIDE_MARGIN = 100; // 左右两侧最小留白距离
+  const MIDDLE_PANEL_WIDTH = 340; // 涓棿鏍忓浐瀹氬搴?
+  const MIN_SIDE_MARGIN = 100; // 宸﹀彸涓や晶鏈€灏忕暀鐧借窛绂?
 
-  // 初始化中间栏位置
+  // 鍒濆鍖栦腑闂存爮浣嶇疆
   useEffect(() => {
     if (containerRef.current && middlePanelOffset === 0) {
       const containerWidth = containerRef.current.offsetWidth;
-      // 居中计算: (总宽度 - 面板宽度) / 2
+      // 灞呬腑璁＄畻: (鎬诲搴?- 闈㈡澘瀹藉害) / 2
       const initialOffset = Math.floor((containerWidth - MIDDLE_PANEL_WIDTH) / 2);
       setMiddlePanelOffset(initialOffset);
     }
@@ -170,7 +170,7 @@ export default function CollectionDetailModal({
       return;
     }
     if (allowedSkillsForNode.length > 0 && !allowedSkillsForNode.includes(selectedSkill)) {
-      alert(`当前节点仅支持：${allowedSkillsForNode.join(' / ')}`);
+      alert(`褰撳墠鑺傜偣浠呮敮鎸侊細${allowedSkillsForNode.join(' / ')}`);
       return;
     }
 
@@ -187,7 +187,7 @@ export default function CollectionDetailModal({
 
 
   const handleClose = () => {
-    // 检查是否有已解析但未确认的文件
+    // Check if there are parsed but unconfirmed files.
     const unconfirmedFiles = uploadedFiles.filter(
       (file) => file.preview_chunks && file.preview_chunks.length > 0 && !file.confirmed
     );
@@ -201,26 +201,26 @@ export default function CollectionDetailModal({
         ? `${fileNames} 等 ${unconfirmedFiles.length} 个文件`
         : fileNames;
       
-      const message = `有 ${unconfirmedFiles.length} 个文件已解析但尚未确认：\n${fileListText}\n\n确定要关闭吗？未确认的文件将不会被保存到数据库。`;
+      const message = `有 ${unconfirmedFiles.length} 个文件已解析但尚未确认：\n${fileListText}\n\n确定要关闭吗？未确认的文件不会保存到数据库。`;
       
       if (window.confirm(message)) {
         onClose();
       }
     } else {
-      // 全部已确认或没有需要确认的文件，直接关闭
+      // All files are confirmed, or no confirmation is required.
       onClose();
     }
   };
 
   const handleDeleteFile = (fileId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // 阻止触发文件选择
+    e.stopPropagation(); // 闃绘瑙﹀彂鏂囦欢閫夋嫨
     onRemoveFile(fileId);
-    // selectedFile 会通过 useEffect 自动更新
+    // selectedFile 浼氶€氳繃 useEffect 鑷姩鏇存柊
   };
 
   const getParseStatus = (status?: string) => {
     if (status === 'uploaded') return { text: '已解析', className: 'bg-emerald-100 text-emerald-700' };
-    if (status === 'failed') return { text: '失败', className: 'bg-rose-100 text-rose-700' };
+    if (status === 'failed') return { text: '澶辫触', className: 'bg-rose-100 text-rose-700' };
     return { text: '未解析', className: 'bg-slate-100 text-slate-600' };
   };
 
@@ -294,7 +294,7 @@ export default function CollectionDetailModal({
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || errorData.message || '确认失败');
+        throw new Error(errorData.detail || errorData.message || '纭澶辫触');
       }
       setSelectedFile({ ...selectedFile, confirmed: true });
     } catch (error: any) {
@@ -348,7 +348,7 @@ export default function CollectionDetailModal({
       return (
         <div className="flex flex-col items-center justify-center p-8 text-slate-400 bg-slate-50 rounded-lg border border-slate-200 border-dashed">
            <AlertCircle className="w-8 h-8 mb-2 text-rose-400"/>
-           <p className="text-sm">数据格式错误，无法显示表单视图</p>
+           <p className="text-sm">数据格式错误，无法显示表单视图。</p>
            <button onClick={() => setViewMode('json')} className="mt-2 text-blue-600 hover:underline text-xs">切换到代码模式修复</button>
         </div>
       );
@@ -358,7 +358,7 @@ export default function CollectionDetailModal({
     const items = Array.isArray(data) ? data : (typeof data === 'object' && data !== null ? [data] : []);
 
     if (items.length === 0) {
-         return <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 rounded-lg border border-slate-200 border-dashed">暂无数据结构</div>;
+         return <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 rounded-lg border border-slate-200 border-dashed">鏆傛棤鏁版嵁缁撴瀯</div>;
     }
 
     const handleFieldUpdate = (itemIndex: number, key: string, value: string) => {
@@ -386,49 +386,50 @@ export default function CollectionDetailModal({
 
     // Dictionary for label translation
     const labelMap: Record<string, string> = {
-      'table_id': '表格编号',
-      'commission_id': '委托单编号',
-      'test_date': '检测日期',
-      'instrument_id': '设备编号',
-      'brick_type': '砖块类型',
-      'strength_grade': '设计强度等级',
-      'rows': '回弹测区数据明细',
-      'items': '检测项明细',
-      'test_location': '测区位置/编号',
-      'estimated_strength_mpa': '推定强度 (MPa)',
-      'converted_strength_mpa': '换算强度 (MPa)',
-      'seq': '序号',
-      'meta': '表格元数据',
-      'control_id': '控制编号',
-      'record_no': '记录编号',
-      'house_name': '房屋名称',
-      'house_details': '房屋详情',
-      'client_org': '委托单位',
-      'inspection_reason': '检测原因',
-      'inspection_basis': '检测依据',
-      'inspection_date': '检测日期',
-      'table_type': '表格类型',
-      'test_location_text': '检测部位',
-      'design_strength_grade': '设计强度等级',
-      'modification_location': '拆改位置',
-      'modification_description': '拆改描述',
-      'photo_index': '照片编号',
-      'photo_no': '照片编号',
-      'damage_location': '损伤位置',
-      'damage_description': '损伤描述',
-      'mortar_strength_mpa': '砌筑砂浆抗压强度取值(MPa)',
-      'brick_strength_grade': '砌墙砖抗压强度等级',
-      'live_loads': '活载',
-      'dead_loads': '恒载(含自重)',
-      'load_combination_type': '荷载基本组合类型',
-      'wind_snow_terrain': '风雪及场地参数',
-      'non_accessible_roof': '不上人屋面',
-      'living_room_bedroom_kitchen_wc': '客厅/卧室/厨房/卫生间',
-      'stair_and_balcony': '楼梯/阳台',
-      'roof': '屋面',
-      'floor_prefab': '楼面(预制板)',
-      'stair_room': '楼梯间'
+      table_id: '表格编号',
+      commission_id: '委托单编号',
+      test_date: '检测日期',
+      instrument_id: '设备编号',
+      brick_type: '砖块类型',
+      strength_grade: '设计强度等级',
+      rows: '回弹测区数据明细',
+      items: '检测项明细',
+      test_location: '测区位置/编号',
+      estimated_strength_mpa: '推定强度 (MPa)',
+      converted_strength_mpa: '换算强度 (MPa)',
+      seq: '序号',
+      meta: '表格元数据',
+      control_id: '控制编号',
+      record_no: '记录编号',
+      house_name: '房屋名称',
+      house_details: '房屋详情',
+      client_org: '委托单位',
+      inspection_reason: '检测原因',
+      inspection_basis: '检测依据',
+      inspection_date: '检测日期',
+      table_type: '表格类型',
+      test_location_text: '检测部位',
+      design_strength_grade: '设计强度等级',
+      modification_location: '拆改位置',
+      modification_description: '拆改描述',
+      photo_index: '照片编号',
+      photo_no: '照片编号',
+      damage_location: '损伤位置',
+      damage_description: '损伤描述',
+      mortar_strength_mpa: '砌筑砂浆抗压强度取值 (MPa)',
+      brick_strength_grade: '砌墙砖抗压强度等级',
+      live_loads: '活载',
+      dead_loads: '恒载(含自重)',
+      load_combination_type: '荷载基本组合类型',
+      wind_snow_terrain: '风雪及场地参数',
+      non_accessible_roof: '不上人屋面',
+      living_room_bedroom_kitchen_wc: '客厅/卧室/厨房/卫生间',
+      stair_and_balcony: '楼梯/阳台',
+      roof: '屋面',
+      floor_prefab: '楼面(预制板)',
+      stair_room: '楼梯间',
     };
+
     const getLabel = (k: string) => labelMap[k] || k;
 
     return (
@@ -442,24 +443,24 @@ export default function CollectionDetailModal({
             <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
                  <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ring-2 ring-blue-100"></div>
-                    记录 #{idx + 1}
+                    璁板綍 #{idx + 1}
                  </span>
                  {/* Confidence Badge */}
                  {confidence !== null && (
                     <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 ${getConfidenceColor(confidence)}`}>
                         <Sparkles className="w-3 h-3" />
-                        {confidence <= 1 ? Math.round(confidence * 100) : confidence}% 置信度
+                        {confidence <= 1 ? Math.round(confidence * 100) : confidence}% 缃俊搴?
                     </span>
                  )}
             </div>
             <div className="divide-y divide-slate-50">
-               {/* 先渲染非数组字段（meta 信息） */}
+               {/* 鍏堟覆鏌撻潪鏁扮粍瀛楁锛坢eta 淇℃伅锛?*/}
                {Object.entries(item).map(([key, val]) => {
-                   const isSystem = key === 'file' || key === 'table_type' || key === '图片序号' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'parser' || key === 'signoff' || key === 'status';
+                   const isSystem = key === 'file' || key === 'table_type' || key === '鍥剧墖搴忓彿' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'parser' || key === 'signoff' || key === 'status';
                    if (isSystem) return null;
-                   if (Array.isArray(val)) return null; // 跳过数组，后面渲染
+                   if (Array.isArray(val)) return null; // 璺宠繃鏁扮粍锛屽悗闈㈡覆鏌?
                    
-                   // 特殊处理 meta 对象：展开其子字段（隐藏 source_file / parser）
+                   // 鐗规畩澶勭悊 meta 瀵硅薄锛氬睍寮€鍏跺瓙瀛楁锛堥殣钘?source_file / parser锛?
                    if (key === 'meta' && typeof val === 'object' && val !== null && !Array.isArray(val)) {
                      const hiddenMetaKeys = new Set(['source_file', 'parser']);
                      const metaEntries = Object.entries(val).filter(([subKey]) => !hiddenMetaKeys.has(subKey));
@@ -476,7 +477,7 @@ export default function CollectionDetailModal({
                               </div>
                               <div className="sm:w-[65%] flex items-center relative">
                                  <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                                 {/* 判断是否为长文本字段 */}
+                                 {/* 鍒ゆ柇鏄惁涓洪暱鏂囨湰瀛楁 */}
                                  {subKey === 'house_details' || subKey === 'description' || subKey === 'notes' ? (
                                     <textarea
                                        className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
@@ -529,7 +530,7 @@ export default function CollectionDetailModal({
                       );
                     }
 
-                   // 通用对象字段展开（例如 live_loads / dead_loads / wind_snow_terrain）
+                   // 閫氱敤瀵硅薄瀛楁灞曞紑锛堜緥濡?live_loads / dead_loads / wind_snow_terrain锛?
                    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
                      const objectEntries = Object.entries(val as Record<string, any>);
                      if (objectEntries.length === 0) return null;
@@ -574,7 +575,7 @@ export default function CollectionDetailModal({
                         </div>
                         <div className="sm:w-[65%] flex items-center relative">
                            <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                           {/* 判断是否为长文本字段 */}
+                           {/* 鍒ゆ柇鏄惁涓洪暱鏂囨湰瀛楁 */}
                            {key === 'house_details' || key === 'modification_description' || key === 'damage_description' || key === 'description' ? (
                               <textarea
                                  className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
@@ -611,14 +612,14 @@ export default function CollectionDetailModal({
                    );
                })}
                
-               {/* 然后渲染数组字段（表格数据） */}
+               {/* 鐒跺悗娓叉煋鏁扮粍瀛楁锛堣〃鏍兼暟鎹級 */}
                {Object.entries(item).map(([key, val]) => {
                    if (!Array.isArray(val)) return null;
                    if (val.length === 0) return null;
                    
                    // Check if it's an array of objects to render as table
                    if (typeof val[0] === 'object') {
-                      // 过滤掉 seq 列
+                      // 杩囨护鎺?seq 鍒?
                       const subHeaders = Object.keys(val[0]).filter(h => h !== 'seq');
                       return (
                         <div key={key} className="flex flex-col border-t border-slate-100 mt-1">
@@ -757,7 +758,7 @@ export default function CollectionDetailModal({
             <div className="w-1/2">
               <input
                 type="text"
-                placeholder="在此输入节点描述信息..."
+                placeholder="鍦ㄦ杈撳叆鑺傜偣鎻忚堪淇℃伅..."
                 className="w-full bg-white border border-slate-300 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg px-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm hover:shadow transition-all outline-none"
               />
             </div>
@@ -782,9 +783,9 @@ export default function CollectionDetailModal({
             <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
               <h3 className="font-medium text-slate-700 flex items-center gap-2">
                 <Database className="w-5 h-5 text-blue-600" />
-                输入数据
+                杈撳叆鏁版嵁
                 <span className="text-xs text-slate-500 ml-auto">
-                  {uploadedFiles.length} 个文件
+                  {uploadedFiles.length} 涓枃浠?
                 </span>
               </h3>
             </div>
@@ -794,9 +795,9 @@ export default function CollectionDetailModal({
                 <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                   <ImageIcon className="w-12 h-12 text-slate-300" />
                 </div>
-                <p className="font-medium mb-1">暂无输入数据</p>
+                <p className="font-medium mb-1">鏆傛棤杈撳叆鏁版嵁</p>
                 <p className="text-xs text-center">
-                  在中间面板上传文件
+                  鍦ㄤ腑闂撮潰鏉夸笂浼犳枃浠?
                 </p>
               </div>
             ) : (
@@ -831,7 +832,7 @@ export default function CollectionDetailModal({
                                 </span>
                                 {file.confirmed && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                                    已确认
+                                    宸茬‘璁?
                                   </span>
                                 )}
                                 {file.error && (
@@ -854,7 +855,7 @@ export default function CollectionDetailModal({
                               <button
                                 onClick={(e) => handleDeleteFile(file.id, e)}
                                 className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 rounded-md transition-all flex-shrink-0 text-slate-400 hover:text-red-600"
-                                title="删除文件"
+                                title="鍒犻櫎鏂囦欢"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -868,13 +869,13 @@ export default function CollectionDetailModal({
                 {selectedFile && middlePanelOffset > 250 && (
                   <div className="p-4 border-t border-slate-200 bg-white">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-slate-700">文件预览</h4>
+                      <h4 className="text-sm font-medium text-slate-700">鏂囦欢棰勮</h4>
                       {(selectedFile.type === 'application/pdf' || selectedFile.name?.toLowerCase().endsWith('.pdf')) && (
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => setPdfZoom(Math.max(0.5, pdfZoom - 0.25))}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800"
-                            title="缩小"
+                            title="缂╁皬"
                           >
                             <ZoomOut className="w-4 h-4" />
                           </button>
@@ -884,14 +885,14 @@ export default function CollectionDetailModal({
                           <button
                             onClick={() => setPdfZoom(Math.min(2, pdfZoom + 0.25))}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800"
-                            title="放大"
+                            title="鏀惧ぇ"
                           >
                             <ZoomIn className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setPdfZoom(1)}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800 ml-1"
-                            title="重置缩放"
+                            title="閲嶇疆缂╂斁"
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
@@ -953,55 +954,53 @@ export default function CollectionDetailModal({
             >
               <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
                 <Settings className="w-4 h-4 text-slate-500" />
-                配置与操作
+                閰嶇疆涓庢搷浣?
               </h3>
               <Move className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
-              {/* File Upload Section - 移到这里 */}
+              {/* File Upload Section - 绉诲埌杩欓噷 */}
               <div className="mb-4">
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
-                  文件上传
+                  鏂囦欢涓婁紶
                 </h4>
                 
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer flex flex-col items-center">
                   <div className="flex items-center justify-center gap-3 mb-2">
                      <Upload className="w-5 h-5 text-slate-400" />
-                     <span className="text-xs text-slate-600">点击上传或拖拽文件 (PDF/图片)</span>
+                     <span className="text-xs text-slate-600">鐐瑰嚮涓婁紶鎴栨嫋鎷芥枃浠?(PDF/鍥剧墖)</span>
                   </div>
                   <button
                     onClick={handleUploadClick}
                     className="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-xs font-medium inline-flex items-center justify-center gap-2"
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    选择文件
+                    閫夋嫨鏂囦欢
                   </button>
                 </div>
 
                 {uploadedFiles.length > 0 && (
                   <div className="mt-1.5 text-xs text-slate-500 text-center">
-                    已选择 {uploadedFiles.length} 个文件
+                    宸查€夋嫨 {uploadedFiles.length} 涓枃浠?
                   </div>
                 )}
               </div>
 
-              {/* Analysis Control Section - 移到这里 */}
-              
->
-                      自动识别文件类型并路由到对应技能
-                    </p>
-                  </div>
-                </div>
-              )}
+                            {/* Analysis Control Section - 移到这里 */}
+              <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-2">
+                <p className="text-[11px] text-blue-700">
+                  自动识别文件类型并路由到对应技能。
+                </p>
+              </div>
 
               {/* Declarative Skill Section - 手动选择技能 */}
               <div className="mb-4">
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-indigo-600 rounded-full"></div>
                   <Sparkles className="w-4 h-4 text-indigo-600" />
-                  手动选择技能
+                  鎵嬪姩閫夋嫨鎶€鑳?
                 </h4>
 
                 <div className="border border-indigo-200 rounded-lg p-3 bg-gradient-to-br from-indigo-50 to-purple-50">
@@ -1023,19 +1022,19 @@ export default function CollectionDetailModal({
                     {isExecutingSkill ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        执行中...
+                        鎵ц涓?..
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-3.5 h-3.5" />
-                        执行技能
+                        鎵ц鎶€鑳?
                       </>
                     )}
                   </button>
 
                   {!selectedSkill && (
                     <p className="text-[10px] text-amber-600 mt-1.5 text-center">
-                      请选择一个技能以继续
+                      璇烽€夋嫨涓€涓妧鑳戒互缁х画
                     </p>
                   )}
                 </div>
@@ -1048,11 +1047,11 @@ export default function CollectionDetailModal({
                   <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                     <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
                     <MessageSquare className="w-4 h-4 text-purple-600" />
-                    自定义提示词
+                    鑷畾涔夋彁绀鸿瘝
                   </h4>
                   <span className="text-[10px] text-slate-500">
                     {customPrompt.trim() ? (
-                      <span className="text-green-600">✓ 已启用</span>
+                      <span className="text-green-600">已启用</span>
                     ) : (
                       <span>可选</span>
                     )}
@@ -1074,18 +1073,18 @@ export default function CollectionDetailModal({
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-slate-600 rounded-full"></div>
-                  其他选项
+                  鍏朵粬閫夐」
                 </h4>
                 
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                     <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
-                    <span className="text-xs text-slate-700">自动保存分析结果</span>
+                    <span className="text-xs text-slate-700">鑷姩淇濆瓨鍒嗘瀽缁撴灉</span>
                   </label>
                   
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                     <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
-                    <span className="text-xs text-slate-700">导出为Excel格式</span>
+                    <span className="text-xs text-slate-700">瀵煎嚭涓篍xcel鏍煎紡</span>
                   </label>
 
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
@@ -1107,7 +1106,7 @@ export default function CollectionDetailModal({
             <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
               <h3 className="font-medium text-slate-700 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-emerald-600" />
-                输出数据
+                杈撳嚭鏁版嵁
                 {analysisResult && (
                   <span className="text-xs text-slate-500 ml-auto">
                     {analysisResult.analyzedAt}
@@ -1121,9 +1120,11 @@ export default function CollectionDetailModal({
                 <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                   <BarChart3 className="w-12 h-12 text-slate-300" />
                 </div>
-                <p className="font-medium mb-1">暂无输出数据</p>
+                <p className="font-medium mb-1">鏆傛棤杈撳嚭鏁版嵁</p>
                 <p className="text-xs text-center">
-                  执行数据分析后<br />结果将在此显示
+                  执行数据分析后
+                  <br />
+                  结果将显示在此处
                 </p>
               </div>
             ) : (
@@ -1131,10 +1132,10 @@ export default function CollectionDetailModal({
 
                 {selectedFile?.validation_result && (
                   <div className="p-4 pb-0">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">校验结果</h4>
+                    <h4 className="text-sm font-medium text-slate-700 mb-3">鏍￠獙缁撴灉</h4>
                     {selectedFile.validation_result.errors?.length > 0 && (
                       <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                        <div className="text-xs font-medium text-rose-700 mb-2">错误</div>
+                        <div className="text-xs font-medium text-rose-700 mb-2">閿欒</div>
                         <ul className="text-xs text-rose-700 space-y-1">
                           {selectedFile.validation_result.errors.map((err, idx) => (
                             <li key={idx}>- {err}</li>
@@ -1144,7 +1145,7 @@ export default function CollectionDetailModal({
                     )}
                     {selectedFile.validation_result.warnings?.length > 0 && (
                       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-xs font-medium text-amber-700 mb-2">警告</div>
+                        <div className="text-xs font-medium text-amber-700 mb-2">璀﹀憡</div>
                         <ul className="text-xs text-amber-700 space-y-1">
                           {selectedFile.validation_result.warnings.map((warn, idx) => (
                             <li key={idx}>- {warn}</li>
@@ -1158,7 +1159,7 @@ export default function CollectionDetailModal({
                 {/* JSON Data Display */}
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-medium text-slate-700">识别结果</h4>
+                    <h4 className="text-sm font-medium text-slate-700">璇嗗埆缁撴灉</h4>
                     <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200">
                         <button
                           onClick={() => setViewMode('form')}
@@ -1169,7 +1170,7 @@ export default function CollectionDetailModal({
                           }`}
                         >
                           <LayoutList className="w-3.5 h-3.5" />
-                          表单
+                          琛ㄥ崟
                         </button>
                         <button
                           onClick={() => setViewMode('json')}
@@ -1180,7 +1181,7 @@ export default function CollectionDetailModal({
                           }`}
                         >
                           <Code className="w-3.5 h-3.5" />
-                          代码
+                          浠ｇ爜
                         </button>
                     </div>
                   </div>
@@ -1236,7 +1237,7 @@ export default function CollectionDetailModal({
                                 </div>
                                 );
                             })}
-                             {selectedFile && Array.isArray(analysisResult.jsonData) && !selectedJsonItem && (
+                            {selectedFile && Array.isArray(analysisResult.jsonData) && !selectedJsonItem && (
                                 <div className="text-xs text-amber-500 mt-2">
                                     请运行声明式技能以处理此文件。
                                 </div>
@@ -1247,11 +1248,11 @@ export default function CollectionDetailModal({
                            <pre className="text-xs text-slate-700 font-mono whitespace-pre-wrap break-words">
                             {analysisResult.jsonData 
                                 ? JSON.stringify(analysisResult.jsonData, null, 2)
-                                : '暂无数据'}
+                                : '鏆傛棤鏁版嵁'}
                             </pre>
                             {selectedFile && (
                                 <div className="text-xs text-amber-500 mt-2">
-                                    请运行声明式技能以处理此文件。
+                                    璇疯繍琛屽０鏄庡紡鎶€鑳戒互澶勭悊姝ゆ枃浠躲€?
                                 </div>
                             )}
                            </>
@@ -1268,8 +1269,8 @@ export default function CollectionDetailModal({
                     >
                       <CheckCircle className="w-4 h-4" />
                       {isConfirming
-                          ? "保存中..."
-                          : "确认无误"}
+                          ? "淇濆瓨涓?.."
+                          : "纭鏃犺"}
                     </button>
                   </div>
                 </div>
@@ -1281,3 +1282,5 @@ export default function CollectionDetailModal({
     </>
   );
 }
+
+

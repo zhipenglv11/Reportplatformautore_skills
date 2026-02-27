@@ -164,6 +164,49 @@ F --> G[返回 chapters 供预览与导出]
 | `analysis_explanation` | 分析说明（当前静态模板） |
 | `opinion_and_suggestions` | 鉴定意见与建议（当前静态模板） |
 
+### 7.4 Skill Catalog（MVP执行清单）
+> 目的：给开发人员明确“每个 skill 做什么、何时调用、输入输出是什么、失败怎么处理”。
+
+#### 7.4.1 Imperative Skills（通用流程）
+| skill_id | 功能定义 | 触发时机 | 关键输入 | 关键输出 | 失败处理 | MVP |
+|---|---|---|---|---|---|---|
+| `ingest` | 文件入库到对象存储并生成来源哈希 | 上传后第一步 | `upload`, `project_id` | `object_key`, `source_hash`, `filename` | 返回上传失败；不进入后续步骤 | 必做 |
+| `parse` | PDF/图片转页图，生成 `evidence_refs`，可选LLM结构化抽取 | ingest 后 | `ingest_result`, `use_llm`, `prompt` | `parse_id`, `page_images/page_paths`, `file_type`, `evidence_refs`, `structured_data` | 解析失败直接中断并记录 `run_log` | 必做 |
+| `mapping` | 将结构化结果映射到 `professional_data` 标准载荷 | parse/declarative 后 | `project_id`, `node_id`, `source_hash`, `structured_data` | `mapped`（落库payload）, `meta`（映射来源信息） | 映射缺字段时返回可诊断错误 | 必做 |
+| `validation` | 校验映射结果（必填/类型/证据/语义规则）并归一化 | mapping 后、confirm 前 | `payload`, `meta` | `is_valid`, `errors`, `warnings`, `normalized`, `policy` | `is_valid=false` 时禁止自动落库，转人工确认 | 必做 |
+| `template_profile` | 提取表头并生成模板指纹（模板匹配辅助） | 模板识别场景 | `images` | `headers`, `headers_normalized`, `fingerprint`, `record_code` | 匹配失败可回退手选模板/技能 | 可选（MVP增强） |
+
+#### 7.4.2 Declarative Skills（信息采集）
+| skill_id | 功能定义 | 典型输入 | 典型输出 | 对应业务数据 | MVP |
+|---|---|---|---|---|---|
+| `concrete_table_recognition` | 识别混凝土相关表格并结构化 | 文件或页图 | 表格记录/字段JSON | 混凝土强度 | 必做 |
+| `mortar_table_recognition` | 识别砂浆强度相关表格并结构化 | 文件或页图 | 表格记录/字段JSON | 砂浆强度 | 必做 |
+| `brick_table_recognition` | 识别砖强度相关表格并结构化 | 文件或页图 | 表格记录/字段JSON | 砖强度 | 必做 |
+| `delegate_info_recognition` | 识别委托/基础信息类字段 | 文件或页图 | 基础信息JSON | 基本情况/房屋概况上游 | 可选 |
+| `software_calculation_recognition` | 识别计算书/验算相关结构化结果 | 文件或页图 | 计算参数JSON | 荷载/承载能力复核 | 可选 |
+
+#### 7.4.3 Generation Skills（章节生成）
+| dataset_key | 处理函数（当前实现） | 功能定义 | 主要输出块类型 | MVP |
+|---|---|---|---|---|
+| `concrete_strength` / `concrete_strength_comprehensive` | `parse_concrete_strength` | 混凝土强度章节生成 | `text` / `table` | 必做 |
+| `mortar_strength` | `parse_mortar_strength` | 砂浆强度章节生成 | `text` / `table` | 必做 |
+| `brick_strength` | `parse_brick_strength` | 砖强度章节生成 | `text` / `table` | 必做 |
+| `inspection_content_and_methods` | `generate_inspection_content_and_methods_async` | 鉴定内容与方法章节 | `text` / `table` | 必做 |
+| `inspection_basis` | `generate_inspection_basis_async` | 检测鉴定依据章节 | `text` | 必做 |
+| `detailed_inspection` | `generate_detailed_inspection_async` | 详细检查情况章节 | `text` / `table` | 必做 |
+| `basic_situation` | `generate_basic_situation_async` | 基本情况章节 | `kv_list` / `text` | 必做 |
+| `house_overview` | `generate_house_overview_async` | 房屋概况章节 | `text` | 必做 |
+| `load_calc_params` | `generate_load_calc_params_async` | 荷载及参数章节 | `text` / `table` | 必做 |
+| `bearing_capacity_review` | `generate_bearing_capacity_review_async` | 承载能力复核验算章节 | `text` / `table` | 必做 |
+| `analysis_explanation` | `generate_analysis_explanation_async` | 分析说明章节（静态模板优先） | `text` / `table` | 可选 |
+| `opinion_and_suggestions` | `generate_opinion_and_suggestions_async` | 鉴定意见与建议章节（静态模板优先） | `text` | 可选 |
+
+#### 7.4.4 统一约束（开发执行）
+1. Skill 输入输出必须受 JSON Schema 约束（见附录 D 的 I/O 契约）。
+2. 所有 skill 执行必须写 `run_log`（至少包含 `run_id/stage/status/error_message`）。
+3. `validation` 未通过的数据不得自动落库，只能走人工确认路径。
+4. Generation skill 输出必须可归一为 `blocks` 结构（`text/table/kv_list/note`）。
+
 ## 8. 数据契约与字段定义
 ### 8.1 系统层锁定字段（不可随意改动）
 以下字段属于系统稳定层，必须冻结契约：
