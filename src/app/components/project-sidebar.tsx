@@ -1,6 +1,4 @@
 import {
-    LayoutGrid,
-    Search,
     ChevronDown,
     ChevronRight,
     Building2,
@@ -8,24 +6,12 @@ import {
     Plus,
     PanelLeftClose,
     PanelLeftOpen,
-    FileText,
-    Pencil,
-    LayoutDashboard,
     Folder,
     Pin,
     Archive,
     Trash2
 } from "lucide-react";
-import { useState, useEffect } from "react";
-import {
-    CommandDialog,
-    CommandInput,
-    CommandList,
-    CommandEmpty,
-    CommandGroup,
-    CommandItem,
-    CommandSeparator,
-} from "./ui/command";
+import { useState } from "react";
 import {
     Dialog,
     DialogContent,
@@ -67,13 +53,12 @@ interface ProjectSidebarProps {
 export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onProjectSelect, currentProjectId }: ProjectSidebarProps) {
     const [isProjectsExpanded, setIsProjectsExpanded] = useState(true);
     const [isCollapsed, setIsCollapsed] = useState(false);
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [isNewProjectDialogOpen, setIsNewProjectDialogOpen] = useState(false);
     const [newProjectInput, setNewProjectInput] = useState('');
     const [showAllProjects, setShowAllProjects] = useState(false);
     
     // 根据 currentView 自动设置 activeItem
-    const activeItem = currentView === 'overview' ? 'overview' : currentView === 'dashboard' ? 'overview' : 'project';
+    const activeItem = currentView === 'dashboard' ? 'dashboard' : 'project';
     const [projects, setProjects] = useState<Project[]>([
         { 
             id: '1', 
@@ -197,17 +182,6 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
     const visibleProjects = showAllProjects ? nonArchivedProjects : nonArchivedProjects.slice(0, defaultVisibleCount);
     const hiddenCount = nonArchivedProjects.length - defaultVisibleCount;
 
-    useEffect(() => {
-        const down = (e: KeyboardEvent) => {
-            if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                setIsSearchOpen((open) => !open);
-            }
-        };
-        document.addEventListener("keydown", down);
-        return () => document.removeEventListener("keydown", down);
-    }, []);
-
     const toggleProjects = () => {
         if (isCollapsed) {
             // 折叠状态下点击"项目"，先展开侧边栏，然后展开项目列表
@@ -222,15 +196,11 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
         setIsCollapsed(!isCollapsed);
     };
 
-    const handleOverviewClick = () => {
-        onNavigate?.('overview');
-    };
-
     const handleLogoClick = () => {
         // 清除所有项目的激活状态
         setProjects(prev => prev.map(p => ({ ...p, isActive: false })));
-        // 导航到概览页面
-        onNavigate?.('overview');
+        // 导航到工作区
+        onNavigate?.('workspace');
     };
 
     const handleProjectClick = (project?: Project) => {
@@ -422,25 +392,7 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
                 </div>
 
                 {/* Main Navigation - Top Section */}
-                <div className="px-3 pb-4 space-y-1">
-                    <button
-                        onClick={handleOverviewClick}
-                        className={`w-full flex items-center py-2.5 rounded-lg transition-all duration-300 text-sm group ${
-                            isCollapsed ? 'justify-center px-0' : 'pl-3'
-                        } ${activeItem === 'overview' ? 'bg-slate-200 text-slate-900 font-medium' : 'text-slate-700 hover:bg-slate-200/50'}`}
-                    >
-                        <LayoutDashboard className={`w-4 h-4 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-auto' : ''} ${activeItem === 'overview' ? 'text-slate-900' : 'text-slate-500 group-hover:text-slate-700'}`} />
-                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}`}>项目概览</span>
-                    </button>
-
-                    <button
-                        onClick={() => setIsSearchOpen(true)}
-                        className={`w-full flex items-center py-2.5 text-slate-700 hover:bg-slate-200/50 rounded-lg transition-all duration-300 text-sm group ${isCollapsed ? 'justify-center px-0' : 'pl-3'}`}
-                    >
-                        <Search className={`w-4 h-4 text-slate-500 group-hover:text-slate-700 flex-shrink-0 transition-all duration-300 ${isCollapsed ? 'mx-auto' : ''}`} />
-                        <span className={`whitespace-nowrap overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-3'}`}>搜索项目</span>
-                    </button>
-                </div>
+                <div className="px-3 pb-4 space-y-1" />
 
                 {/* Projects Section */}
                 <div className="flex-1 overflow-y-auto px-3 py-2">
@@ -570,85 +522,6 @@ export function ProjectSidebar({ onNavigate, currentView, onProjectCreated, onPr
                 </div>
             </div>
 
-            <CommandDialog open={isSearchOpen} onOpenChange={setIsSearchOpen}>
-                <CommandInput placeholder="搜索项目名称、项目关键词、项目编号..." />
-                <CommandList>
-                    <CommandEmpty>未找到相关项目。</CommandEmpty>
-                    <CommandGroup heading="新聊天">
-                        <CommandItem onSelect={() => {
-                            setIsSearchOpen(false);
-                            handleProjectClick();
-                        }}>
-                            <Pencil className="mr-2 h-4 w-4" />
-                            <span>新对话</span>
-                        </CommandItem>
-                    </CommandGroup>
-                    <CommandSeparator />
-                    <CommandGroup heading="今天">
-                        <CommandItem onSelect={() => {
-                            setIsSearchOpen(false);
-                            handleProjectClick();
-                        }}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            <span>绘制客户旅程工具</span>
-                        </CommandItem>
-                        {projects.slice(0, 1).map((project) => (
-                            <CommandItem key={project.id} onSelect={() => {
-                                setIsSearchOpen(false);
-                                handleProjectClick();
-                            }}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                <span>{project.name}</span>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                    <CommandSeparator />
-                    <CommandGroup heading="昨天">
-                        <CommandItem onSelect={() => {
-                            setIsSearchOpen(false);
-                            handleProjectClick();
-                        }}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            <span>模板报告生成方法</span>
-                        </CommandItem>
-                        {projects.slice(1, 2).map((project) => (
-                            <CommandItem key={project.id} onSelect={() => {
-                                setIsSearchOpen(false);
-                                handleProjectClick();
-                            }}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                <span>{project.name}</span>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                    <CommandSeparator />
-                    <CommandGroup heading="前7天">
-                        <CommandItem onSelect={() => {
-                            setIsSearchOpen(false);
-                            handleProjectClick();
-                        }}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            <span>Claude安装错误解决</span>
-                        </CommandItem>
-                        <CommandItem onSelect={() => {
-                            setIsSearchOpen(false);
-                            handleProjectClick();
-                        }}>
-                            <FileText className="mr-2 h-4 w-4" />
-                            <span>盯着干还是定标准</span>
-                        </CommandItem>
-                        {projects.slice(2).map((project) => (
-                            <CommandItem key={project.id} onSelect={() => {
-                                setIsSearchOpen(false);
-                                handleProjectClick();
-                            }}>
-                                <FileText className="mr-2 h-4 w-4" />
-                                <span>{project.name}</span>
-                            </CommandItem>
-                        ))}
-                    </CommandGroup>
-                </CommandList>
-            </CommandDialog>
 
             {/* New Project Dialog */}
             <Dialog open={isNewProjectDialogOpen} onOpenChange={setIsNewProjectDialogOpen}>

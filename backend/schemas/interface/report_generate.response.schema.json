@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReportGenerateResponse",
+  "type": "object",
+  "required": [
+    "report_id",
+    "chapters"
+  ],
+  "properties": {
+    "report_id": {
+      "type": "string"
+    },
+    "chapters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "chapter_id",
+          "title",
+          "chapter_content"
+        ],
+        "properties": {
+          "chapter_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "chapter_content": {
+            "type": "object",
+            "required": [
+              "blocks"
+            ],
+            "properties": {
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "type"
+                  ],
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": [
+                        "text",
+                        "table",
+                        "kv_list",
+                        "note"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array"
+                    },
+                    "columns": {
+                      "type": "array"
+                    },
+                    "rows": {
+                      "type": "array"
+                    },
+                    "header_rows": {
+                      "type": "array"
+                    },
+                    "body_rows": {
+                      "type": "array"
+                    },
+                    "facts": {
+                      "type": "object"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            },
+            "additionalProperties": true
+          },
+          "summary": {
+            "type": "object"
+          },
+          "evidence_refs": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}
+

@@ -1,47 +1,32 @@
 ﻿import { useCallback, useState, useEffect, useRef } from "react";
-import ReactFlow, {
-  Background,
-  Controls,
-  MiniMap,
+import {
+  Node,
+  Edge,
   useNodesState,
   useEdgesState,
-  Edge,
-  Node,
-  NodeTypes,
-  useReactFlow,
-  ReactFlowProvider,
-  SelectionMode,
 } from "reactflow";
-import "reactflow/dist/style.css";
-import ReportNode from "./nodes/report-node";
-import NodeSidebar from "./node-sidebar";
-import { ProjectSidebar } from "./project-sidebar";
+import { 
+  FileText, 
+  ChevronLeft, 
+  ChevronRight, 
+  Plus, 
+  Trash2, 
+  Settings,
+  MoreVertical,
+  Wand2,
+  BookTemplate
+} from "lucide-react";
+import { cn } from "./ui/utils";
+import {
+  ResizablePanelGroup,
+  ResizablePanel,
+  ResizableHandle,
+} from "./ui/resizable";
+import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 import ReportNodeEditor from "./report-node-editor";
-import { ReportPreview } from "./report-preview"; // Import the new component
-import { FileText, ChevronLeft, ChevronRight, Eye, RotateCcw, Trash2 } from "lucide-react";
-
-const nodeTypes: NodeTypes = {
-  report: ReportNode,
-};
-
-// FitView 组件：只在初始加载时调用 fitView
-function FitView() {
-  const { fitView } = useReactFlow();
-  const hasFittedRef = useRef(false);
-
-  useEffect(() => {
-    if (!hasFittedRef.current) {
-      // 延迟执行，确保节点已渲染
-      const timer = setTimeout(() => {
-        fitView({ duration: 400, padding: 0.2 });
-        hasFittedRef.current = true;
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [fitView]);
-
-  return null;
-}
+import { ReportChapterTree } from "./report-chapter-tree";
+import { ReportPreview } from "./report-preview";
 
 interface ReportEditorProps {
   projectId: string;
@@ -58,11 +43,10 @@ interface ReportGenerationSnapshot {
   createdAt: string;
   reportType: string;
   chapters: any[];
-  nodeSnapshot: Node[];
   chapterCount: number;
 }
 
-function ReportEditorContent({
+export default function ReportEditor({
   projectId,
   reportType,
   collectionNodes,
@@ -71,53 +55,62 @@ function ReportEditorContent({
   onNodesChange: onNodesChangeProp,
   onEdgesChange: onEdgesChangeProp,
 }: ReportEditorProps) {
-  const getDefaultReferenceByReportType = useCallback((type?: string) => {
-    const mapping: Record<string, { code: string; name: string }> = {
-      "民用建筑可靠性鉴定": { code: "GB 50292-2015", name: "民用建筑可靠性鉴定标准" },
-      "危险房屋鉴定": { code: "JGJ 125-2016", name: "危险房屋鉴定标准" },
-      "抗震鉴定": { code: "GB 50023-2009", name: "建筑抗震鉴定标准" },
-      "主体结构施工质量鉴定": { code: "GB 50204-2015", name: "混凝土结构工程施工质量验收规范" },
-    };
-    return mapping[type || ""] || { code: "JGJ 125-2016", name: "危险房屋鉴定标准" };
-  }, []);
-
-  const [nodes, setNodes, onNodesChange] =
-    useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] =
-    useEdgesState(initialEdges);
-  const [selectedNode, setSelectedNode] = useState<any>(null);
-  const [showGenerateModal, setShowGenerateModal] =
-    useState(false);
-  const [previewHeight, setPreviewHeight] = useState(55); // 预览面板高度百分比，默认55%
-  const [isResizingPreview, setIsResizingPreview] =
-    useState(false);
-  const [isEditorOpen, setIsEditorOpen] = useState(false);
-  const { setCenter, getNode, fitView, getViewport } = useReactFlow();
-
-  const [editorPosition, setEditorPosition] = useState({ x: -1, y: 100 });
-  const [editorSize, setEditorSize] = useState({ width: 420, height: 600 });
-  const [isDraggingEditor, setIsDraggingEditor] = useState(false);
-  const [isResizingEditor, setIsResizingEditor] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [resizeStart, setResizeStart] = useState({ 
-    mouseX: 0, 
-    mouseY: 0, 
-    width: 0, 
-    height: 0 
-  });
-
-  const [isReportGenerating, setIsReportGenerating] = useState(false);
-  const [reportChapters, setReportChapters] = useState<any[]>([]);
+  
+  const [nodes, setNodes] = useState<Node[]>(initialNodes || []);
+  const [edges, setEdges] = useState<Edge[]>(initialEdges || []);
+  
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [generatedChapters, setGeneratedChapters] = useState<any[]>([]);
+  const [showReportPreview, setShowReportPreview] = useState(false);
   const [reportHistory, setReportHistory] = useState<ReportGenerationSnapshot[]>([]);
   const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(true);
-  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // 使用 ref 来跟踪是否是内部更新，避免循环同步
+  // Sync with props
   const isInternalUpdateRef = useRef(false);
   const initialNodesRef = useRef(initialNodes);
   const initialEdgesRef = useRef(initialEdges);
-
   const historyStorageKey = `project_${projectId}_report_generation_history`;
+
+  // Sync props -> state
+  useEffect(() => {
+    const nodesChanged = JSON.stringify(initialNodes) !== JSON.stringify(initialNodesRef.current);
+    if (nodesChanged && !isInternalUpdateRef.current) {
+        initialNodesRef.current = initialNodes;
+        setNodes(initialNodes || []);
+    }
+  }, [initialNodes]);
+
+  useEffect(() => {
+    const edgesChanged = JSON.stringify(initialEdges) !== JSON.stringify(initialEdgesRef.current);
+    if (edgesChanged && !isInternalUpdateRef.current) {
+        initialEdgesRef.current = initialEdges;
+        setEdges(initialEdges || []);
+    }
+  }, [initialEdges]);
+
+  // Sync state -> props (debounce)
+  useEffect(() => {
+    if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+        onNodesChangeProp(nodes);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [nodes, onNodesChangeProp]);
+
+  useEffect(() => {
+     if (isInternalUpdateRef.current) {
+      isInternalUpdateRef.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+        onEdgesChangeProp(edges);
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [edges, onEdgesChangeProp]);
 
   useEffect(() => {
     try {
@@ -145,1038 +138,427 @@ function ReportEditorContent({
     }
   }, [historyStorageKey, reportHistory]);
 
-  // 处理编辑器拖动
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isDraggingEditor) {
-        const newX = e.clientX - dragOffset.x;
-        const newY = e.clientY - dragOffset.y;
 
-        // 简单的边界检查
-        const maxX = window.innerWidth - editorSize.width;
-        const maxY = window.innerHeight - 50;
+  // Actions
+  const handleAddChapter = () => {
+    isInternalUpdateRef.current = true;
+    const currentEdges = edges || [];
+    const currentNodes = nodes || [];
+    
+    const rootNodesCount = currentNodes.filter(n => !currentEdges.some(e => e.target === n.id)).length;
+    
+    const newNode: Node = {
+      id: `chapter-${Date.now()}`,
+      type: 'report',
+      position: { x: 0, y: (currentNodes.length || 0) * 100 }, 
+      data: { 
+        label: '新章节',
+        chapterNumber: `${rootNodesCount + 1}` 
+      },
+      width: 150,
+      height: 40,
+    };
+    
+    setNodes(prev => [...(prev || []), newNode]);
+    setSelectedNodeId(newNode.id);
+  };
 
-        setEditorPosition({
-          x: Math.max(0, Math.min(maxX, newX)),
-          y: Math.max(0, Math.min(maxY, newY))
+  const handleAddSubChapter = (parentId: string) => {
+    const parentNode = nodes.find(n => n.id === parentId);
+    if (!parentNode) return;
+
+    isInternalUpdateRef.current = true;
+
+    const currentEdges = edges || [];
+    const currentNodes = nodes || [];
+    const existingChildIds = currentEdges
+      .filter((edge) => edge.source === parentId)
+      .map((edge) => edge.target);
+    const existingChildren = currentNodes.filter((node) => existingChildIds.includes(node.id));
+    const parentChapterNumber = String(parentNode.data?.chapterNumber || "").trim();
+
+    const existingIndexes = existingChildren
+      .map((child) => String(child.data?.chapterNumber || ""))
+      .map((num) => {
+        if (!num) return NaN;
+        if (!parentChapterNumber || !num.startsWith(`${parentChapterNumber}.`)) return NaN;
+        const lastSegment = num.split(".").pop();
+        const parsed = Number.parseInt(lastSegment || "", 10);
+        return Number.isFinite(parsed) ? parsed : NaN;
+      })
+      .filter((num) => Number.isFinite(num)) as number[];
+    const nextChildIndex = (existingIndexes.length > 0 ? Math.max(...existingIndexes) : 0) + 1;
+    const nextChildChapterNumber = parentChapterNumber
+      ? `${parentChapterNumber}.${nextChildIndex}`
+      : "";
+
+    const newNode: Node = {
+      id: `chapter-${Date.now()}`,
+      type: 'report',
+      position: { x: 0, y: 0 },
+      data: { 
+        label: '新子章节',
+        chapterNumber: nextChildChapterNumber,
+      },
+      width: 150,
+      height: 40,
+    };
+
+    const newEdge: Edge = {
+      id: `edge-${Date.now()}`,
+      source: parentId,
+      target: newNode.id,
+      type: 'smoothstep'
+    };
+
+    setNodes(prev => [...(prev || []), newNode]);
+    setEdges(prev => [...(prev || []), newEdge]);
+    setSelectedNodeId(newNode.id);
+  };
+
+  const traverseDelete = (nodeId: string, currentNodes: Node[], currentEdges: Edge[]) => {
+    const nodesToDelete = new Set<string>();
+    const edgesToDelete = new Set<string>();
+    
+    const stack = [nodeId];
+    
+    while (stack.length > 0) {
+        const currentId = stack.pop()!;
+        nodesToDelete.add(currentId);
+        
+        const outgoingEdges = currentEdges.filter(e => e.source === currentId);
+        outgoingEdges.forEach(e => {
+            edgesToDelete.add(e.id);
+            if (!nodesToDelete.has(e.target)) {
+                stack.push(e.target);
+            }
         });
-      } else if (isResizingEditor) {
-        // 计算鼠标移动的距离
-        const deltaX = e.clientX - resizeStart.mouseX;
-        const deltaY = e.clientY - resizeStart.mouseY;
-        
-        // 基于初始尺寸和移动距离计算新尺寸
-        const newWidth = Math.max(320, resizeStart.width + deltaX);
-        const newHeight = Math.max(400, resizeStart.height + deltaY);
-        
-        setEditorSize({
-          width: newWidth,
-          height: newHeight
-        });
-      }
-    };
 
-    const handleMouseUp = () => {
-      setIsDraggingEditor(false);
-      setIsResizingEditor(false);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-
-    if (isDraggingEditor || isResizingEditor) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = 'none';
-      if (isResizingEditor) {
-        document.body.style.cursor = 'nwse-resize';
-      }
+        const incomingEdges = currentEdges.filter(e => e.target === currentId);
+        incomingEdges.forEach(e => edgesToDelete.add(e.id));
     }
 
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-    };
-  }, [isDraggingEditor, isResizingEditor, dragOffset, editorPosition, editorSize]);
-
-  const handleEditorHeaderMouseDown = useCallback((e: React.MouseEvent) => {
-    setDragOffset({
-      x: e.clientX - editorPosition.x,
-      y: e.clientY - editorPosition.y
-    });
-    setIsDraggingEditor(true);
-  }, [editorPosition]);
-
-
-  // 当父组件传入的初始数据改变时（比如切换项目），同步到本地状态
-  useEffect(() => {
-    // 使用深度比较，避免不必要的更新
-    const nodesChanged = JSON.stringify(initialNodes) !== JSON.stringify(initialNodesRef.current);
-    if (nodesChanged && !isInternalUpdateRef.current) {
-      initialNodesRef.current = initialNodes;
-      setNodes(initialNodes);
-    }
-  }, [initialNodes, setNodes]);
-
-  useEffect(() => {
-    const edgesChanged = JSON.stringify(initialEdges) !== JSON.stringify(initialEdgesRef.current);
-    if (edgesChanged && !isInternalUpdateRef.current) {
-      initialEdgesRef.current = initialEdges;
-      setEdges(initialEdges);
-    }
-  }, [initialEdges, setEdges]);
-
-  // 同步本地状态到父组件（使用防抖避免频繁更新）
-  useEffect(() => {
-    if (isInternalUpdateRef.current) {
-      isInternalUpdateRef.current = false;
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      onNodesChangeProp(nodes);
-    }, 50);
-    
-    return () => clearTimeout(timer);
-  }, [nodes, onNodesChangeProp]);
-
-  useEffect(() => {
-    if (isInternalUpdateRef.current) {
-      isInternalUpdateRef.current = false;
-      return;
-    }
-    
-    const timer = setTimeout(() => {
-      onEdgesChangeProp(edges);
-    }, 50);
-    
-    return () => clearTimeout(timer);
-  }, [edges, onEdgesChangeProp]);
-
-  const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: any) => {
-      setSelectedNode(node);
-      // Close editor on single click if selecting a different node
-      // Or keep it open if you want "sticky" behavior, but requirement implies explicitly double click to open
-      // We'll keep it simple: Single click selects, doesn't toggle editor.
-    },
-    [],
-  );
-
-  const onNodeDoubleClick = useCallback(
-    (_: React.MouseEvent, node: any) => {
-      setSelectedNode(node);
-      setIsEditorOpen(true);
-
-      const { x, y, zoom } = getViewport();
-      // Calculate node's position in screen coordinates relative to the container
-      // node.position is the top-left of the node in flow coordinates
-      const nodeX = node.position.x * zoom + x;
-      const nodeY = node.position.y * zoom + y;
-
-      // Place editor to the right of the node (width approx 320px)
-      // Add some buffer (e.g. 20px)
-      const buffer = 20;
-      const nodeWidth = 320 * zoom;
-
-      setEditorPosition({
-        x: nodeX + nodeWidth + buffer,
-        y: nodeY
-      });
-    },
-    [getViewport]
-  );
-
-  // Template chapters mapping
-  const templateChapters: Record<string, string[]> = {
-    "危险房屋鉴定": [
-      "一、基本情况",
-      "二、房屋概况",
-      "三、鉴定内容和方法及原始记录一览表",
-      "四、检测鉴定依据",
-      "五、检查和检测情况",
-      "六、复核验算",
-      "七、分析评述",
-      "八、鉴定意见及处理建议"
-    ],
-    "标准结构检测报告": [
-      "一、工程概况",
-      "二、检测依据",
-      "三、检测内容和方法",
-      "四、检测结果",
-      "五、检测结论",
-      "六、建议"
-    ],
-    "混凝土专项检测": [
-      "一、工程概况",
-      "二、检测方法",
-      "三、检测结果",
-      "四、结论与建议"
-    ],
-    "钢筋保护层厚度检测": [
-      "一、工程概况",
-      "二、检测方法",
-      "三、检测结果"
-    ],
-    "建筑物沉降观测": [
-      "一、工程概况",
-      "二、观测点布设",
-      "三、观测方法",
-      "四、观测数据",
-      "五、数据分析"
-    ],
-    "装配式结构验收": [
-      "一、工程概况",
-      "二、预制构件进场验收",
-      "三、连接节点验收",
-      "四、灌浆质量验收",
-      "五、结构性能检测",
-      "六、验收结论",
-      "七、建议"
-    ],
-    "节能工程检测": [
-      "一、工程概况",
-      "二、检测内容",
-      "三、检测方法",
-      "四、检测结果"
-    ],
-    "民用建筑可靠性鉴定": [
-      "一、工程概况",
-      "二、鉴定依据",
-      "三、鉴定内容",
-      "四、现场检查与检测",
-      "五、结构安全性评估",
-      "六、结构使用性评估",
-      "七、鉴定结论",
-      "八、处理建议"
-    ],
-    "工业建筑可靠性鉴定": [
-      "一、工程概况",
-      "二、鉴定依据",
-      "三、鉴定内容",
-      "四、现场检查与检测",
-      "五、结构系统鉴定",
-      "六、构件鉴定",
-      "七、材料鉴定",
-      "八、结构安全性评估",
-      "九、结构使用性评估",
-      "十、鉴定结论与建议"
-    ],
-    "抗震鉴定": [
-      "一、工程概况",
-      "二、鉴定依据",
-      "三、现场检查",
-      "四、抗震承载力验算",
-      "五、抗震构造措施检查",
-      "六、抗震性能评估",
-      "七、鉴定结论"
-    ],
-    "主体结构施工质量鉴定": [
-      "一、工程概况",
-      "二、鉴定依据",
-      "三、检查内容",
-      "四、检测结果",
-      "五、质量评估",
-      "六、鉴定结论"
-    ]
+    return { nodesToDelete, edgesToDelete };
   };
 
-  const getTemplateStyleForTitle = (title: string) => {
-    if (title.includes("房屋概况")) {
-      return "house_overview";
+  const handleDeleteNode = (nodeId: string) => {
+    isInternalUpdateRef.current = true;
+    const { nodesToDelete, edgesToDelete } = traverseDelete(nodeId, nodes, edges);
+    
+    setNodes(prev => prev.filter(n => !nodesToDelete.has(n.id)));
+    setEdges(prev => prev.filter(e => !edgesToDelete.has(e.id)));
+    
+    if (selectedNodeId && nodesToDelete.has(selectedNodeId)) {
+        setSelectedNodeId(null);
     }
-    if (title.includes("基本情况")) {
-      return "basic_situation";
-    }
-    if (title.includes("鉴定内容和方法") && title.includes("原始记录")) {
-      return "inspection_content_and_methods";
-    }
-    if (title.includes("检测鉴定依据") || title.includes("鉴定依据") || title.includes("检测依据")) {
-      return "inspection_basis";
-    }
-    if (title.includes("检查情况") || title.includes("现场检查") || title.includes("检查和检测情况")) {
-      return "detailed_inspection";
-    }
-    if (title.includes("荷载及计算参数取值")) {
-      return "load_calc_params";
-    }
-    if (title.includes("承载能力复核验算")) {
-      return "bearing_capacity_review";
-    }
-    if (title.includes("分析说明") || title.includes("分析评述")) {
-      return "analysis_explanation";
-    }
-    if (title.includes("鉴定意见") || title.includes("处理建议")) {
-      return "opinion_and_suggestions";
-    }
-    return "text_table_1";
   };
 
-  const getDefaultSourceForTitle = (title: string) => {
-    if (title.includes("房屋概况")) {
-      return "scope_house_overview";
-    }
-    if (title.includes("基本情况")) {
-      return "scope_basic_situation";
-    }
-    if (title.includes("检测鉴定依据") || title.includes("鉴定依据") || title.includes("检测依据")) {
-      return "scope_inspection_basis";
-    }
-    if (title.includes("检查情况") || title.includes("现场检查") || title.includes("检查和检测情况")) {
-      return "scope_detailed_inspection";
-    }
-    if (title.includes("荷载及计算参数取值")) {
-      return "scope_load_calc_params";
-    }
-    if (title.includes("承载能力复核验算")) {
-      return "scope_bearing_capacity_review";
-    }
-    if (title.includes("分析说明") || title.includes("分析评述")) {
-      return "scope_analysis_explanation";
-    }
-    if (title.includes("鉴定意见") || title.includes("处理建议")) {
-      return "scope_opinion_and_suggestions";
-    }
-    return null;
-  };
-
-  const addNode = useCallback(
-    (chapterTitle: string) => {
-      // 检查是否是模板
-      if (chapterTitle.startsWith("TEMPLATE:")) {
-        const templateName = chapterTitle.replace("TEMPLATE:", "");
-        const chapters = templateChapters[templateName];
-        
-        if (chapters && chapters.length > 0) {
-          // 创建多个节点
-          const newNodes = chapters.map((chapter, index) => {
-            // 从章节标题中提取编号(如"一、"、"二、"等)
-            const chapterMatch = chapter.match(/^([一二三四五六七八九十]+)、/);
-            const chapterNumber = chapterMatch ? chapterMatch[1] : `${index + 1}`;
-            const title = chapter.replace(/^[一二三四五六七八九十]+、/, "");
-
-            return {
-              id: `report-${Date.now()}-${index}`,
-              type: "report",
-              position: {
-                x: 100 + (index % 3) * 400,
-                y: 100 + Math.floor(index / 3) * 150,
-              },
-              data: {
-                label: title || chapter,
-                chapterNumber: chapterNumber,
-                llmModel: "",
-                prompt: "",
-                references: [],
-                templates: [],
-                templateStyle: getTemplateStyleForTitle(title || chapter),
-                sourceNodeId: getDefaultSourceForTitle(title || chapter),
-                referenceSpecType: "system",
-                referenceSpec: (title || chapter).includes("检测鉴定依据")
-                  ? getDefaultReferenceByReportType(reportType).code
-                  : "JGJ/T 23-2011",
-                systemReferenceCode: (title || chapter).includes("检测鉴定依据")
-                  ? getDefaultReferenceByReportType(reportType).code
-                  : "JGJ/T 23-2011",
-                systemReferenceName: (title || chapter).includes("检测鉴定依据")
-                  ? getDefaultReferenceByReportType(reportType).name
-                  : "",
-                status: 'idle',
-              },
-            };
-          });
-          
-          // 标记为内部更新,避免触发循环同步
-          isInternalUpdateRef.current = true;
-          setNodes((nds) => [...nds, ...newNodes]);
-          return;
-        }
-      }
-
-      // 原有的单个节点创建逻辑
-      // 从标题中提取章节编号
-      const match = chapterTitle.match(/第(.+?)章\s*(.+)/);
-      const chapterNumber = match
-        ? match[1]
-        : `${nodes.length + 1}`;
-      const title = match ? match[2] : chapterTitle;
-
-      const newNode = {
-        id: `report-${Date.now()}`,
-        type: "report",
-        position: {
-          x: Math.random() * 400 + 100,
-          y: Math.random() * 400 + 100,
-        },
-        data: {
-          label: title,
-          chapterNumber: chapterNumber,
-          llmModel: "",
-          prompt: "",
-          references: [],
-          templates: [],
-          templateStyle: getTemplateStyleForTitle(title),
-          sourceNodeId: getDefaultSourceForTitle(title),
-          referenceSpecType: "system",
-          referenceSpec: title.includes("检测鉴定依据")
-            ? getDefaultReferenceByReportType(reportType).code
-            : "JGJ/T 23-2011",
-          systemReferenceCode: title.includes("检测鉴定依据")
-            ? getDefaultReferenceByReportType(reportType).code
-            : "JGJ/T 23-2011",
-          systemReferenceName: title.includes("检测鉴定依据")
-            ? getDefaultReferenceByReportType(reportType).name
-            : "",
-          status: 'idle', // idle, running, completed
-        },
-      };
-      
-      // 标记为内部更新,避免触发循环同步
+  const handleNodeUpdate = (updatedNode: Node) => {
       isInternalUpdateRef.current = true;
-      setNodes((nds) => [...nds, newNode]);
-    },
-    [nodes.length, setNodes, getDefaultReferenceByReportType, getDefaultSourceForTitle, reportType],
-  );
+      setNodes(prev => prev.map(n => n.id === updatedNode.id ? updatedNode : n));
+  };
 
-  // 处理章节选中和定位
-  const handleNodeSelect = useCallback(
-    (nodeId: string) => {
-      const node = getNode(nodeId);
-      if (node) {
-        setSelectedNode(node);
-        setCenter(node.position.x + 100, node.position.y + 50, {
-          zoom: 1.2,
-          duration: 800,
-        });
-        // 閫変腑鐘舵€佹洿鏂颁笉闇€瑕佹爣璁颁负鍐呴儴鏇存柊锛岃繖鏄敤鎴锋搷浣?
-        setNodes((nds) =>
-          nds.map((n) => ({
-            ...n,
-            selected: n.id === nodeId,
-          })),
-        );
-      }
-    },
-    [getNode, setCenter, setNodes],
-  );
+  const parseChapterNumber = (value: string): number[] => {
+    if (!value || value.trim() === "") return [Number.MAX_SAFE_INTEGER];
+    return value
+      .split(".")
+      .map((part) => Number.parseInt(part, 10))
+      .map((num) => (Number.isFinite(num) ? num : Number.MAX_SAFE_INTEGER));
+  };
 
-  // 鍋滄鎶ュ憡鐢熸垚
-  const handleStopGeneration = useCallback(() => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
+  const sortByChapterNumber = (a: Node, b: Node): number => {
+    const aKey = parseChapterNumber(String(a.data?.chapterNumber || ""));
+    const bKey = parseChapterNumber(String(b.data?.chapterNumber || ""));
+    const maxLen = Math.max(aKey.length, bKey.length);
+    for (let i = 0; i < maxLen; i += 1) {
+      const av = aKey[i] ?? 0;
+      const bv = bKey[i] ?? 0;
+      if (av !== bv) return av - bv;
     }
-    setIsReportGenerating(false);
-    // 灏嗘墍鏈?running 鐘舵€佺殑鑺傜偣閲嶇疆涓?idle
-    // 杩欐槸鐢ㄦ埛鎿嶄綔锛屽簲璇ュ悓姝ュ埌鐖剁粍浠?
-    setNodes((nds) => nds.map(n => 
-      n.data.status === 'running' ? { ...n, data: { ...n.data, status: 'idle' } } : n
-    ));
-  }, [setNodes]);
+    return String(a.data?.label || "").localeCompare(String(b.data?.label || ""), "zh-CN");
+  };
 
-  // 妯℃嫙鎶ュ憡鐢熸垚杩囩▼
-  const handleGenerateReport = async () => {
-    // ???? AbortController
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
+  const resolveDatasetKey = (templateStyle: string): string => {
+    const mapping: Record<string, string> = {
+      concrete_strength_full: "concrete_strength_comprehensive",
+      concrete_strength_table: "concrete_strength",
+      concrete_strength_desc: "concrete_strength",
+      mortar_strength_data: "mortar_strength",
+      brick_strength_table: "brick_strength",
+      basic_situation: "basic_situation",
+      house_overview: "house_overview",
+      inspection_content_and_methods: "inspection_content_and_methods",
+      inspection_basis: "inspection_basis",
+      detailed_inspection: "detailed_inspection",
+      load_calc_params: "load_calc_params",
+      bearing_capacity_review: "bearing_capacity_review",
+      analysis_explanation: "analysis_explanation",
+      opinion_and_suggestions: "opinion_and_suggestions",
+    };
+    return mapping[templateStyle] || templateStyle || "concrete_strength";
+  };
 
-    setShowGenerateModal(true);
-    setIsReportGenerating(true);
-    setReportChapters([]);
+  const handleGenerateFinalReport = async () => {
+    const chapterNodes = (nodes || []).filter((n) => n.type === "report");
+    if (chapterNodes.length === 0) {
+      alert("请先添加至少一个章节。");
+      return;
+    }
 
-    // ????????
-    setNodes((nds) => nds.map(n => ({ ...n, data: { ...n.data, status: 'idle' } })));
+    setIsGeneratingReport(true);
+    setShowReportPreview(true);
+    setSelectedNodeId(null);
+    setGeneratedChapters([]);
 
-    // ???????????
-    const sortedNodes = [...nodes].sort((a, b) => {
-      return parseFloat(a.data.chapterNumber) - parseFloat(b.data.chapterNumber);
-    });
+    const sortedNodes = [...chapterNodes].sort(sortByChapterNumber);
+    const successChapters: any[] = [];
+    const failedTitles: string[] = [];
 
-    const nextChapters: any[] = [];
     for (const node of sortedNodes) {
-      if (signal.aborted) {
-        break;
-      }
-
-      setNodes((nds) => nds.map(n =>
-        n.id === node.id ? { ...n, data: { ...n.data, status: 'running' } } : n
-      ));
-
-      setCenter(node.position.x + 100, node.position.y + 50, { zoom: 1.2, duration: 500 });
+      const templateStyle = String(node.data?.templateStyle || "");
+      const sourceNodeId = node.data?.sourceNodeId || null;
+      const chapterConfig = {
+        node_id: node.id,
+        chapter_id: node.id,
+        title: node.data?.label || "未命名章节",
+        dataset_key: resolveDatasetKey(templateStyle),
+        sourceNodeId,
+        context: sourceNodeId
+          ? { source_node_id: sourceNodeId, sourceNodeId }
+          : {},
+      };
 
       try {
-        const referenceSpecType = node.data?.referenceSpecType || node.data?.referenceTab || "system";
-        const referenceSpec =
-          node.data?.referenceSpec ||
-          node.data?.referenceCode ||
-          node.data?.systemReferenceCode ||
-          "JGJ/T 23-2011";
-        // 鑾峰彇鏁版嵁婧愯妭鐐笽D锛堢敤浜庢煡璇㈡暟鎹級
-        const sourceNodeId = node.data?.sourceNodeId || node.data?.source_node_id || null;
-        
-        const ruleId =
-          node.data?.userReferenceCode ||
-          (referenceSpecType === "user" ? referenceSpec : undefined);
-
-        const templateStyle = node.data?.templateStyle || node.data?.template_style || "concrete_strength_table";
-        
-        // 根据 templateStyle 自动映射 dataset_key(已更新为新系统)
-        const datasetKeyMap: Record<string, string> = {
-          'concrete_strength_full': 'concrete_strength',  // 混凝土强度(新系统)
-          'concrete_strength_table': 'concrete_strength',  // 混凝土强度表格(兼容旧系统)
-          'concrete_strength_desc': 'concrete_strength',  // 混凝土强度描述(兼容旧系统)
-          'mortar_strength_data': 'mortar_strength',  // 砂浆强度数据
-          'mortar_strength_desc': 'mortar_strength',  // 砂浆强度描述
-          'brick_strength_table': 'brick_strength',  // 砖强度表格
-          'brick_strength_desc': 'brick_strength',  // 砖强度描述
-          'inspection_content_and_methods': 'inspection_content_and_methods',  // 鉴定内容和方法及原始记录一览表
-          'inspection_basis': 'inspection_basis',  // 检测鉴定依据
-          'detailed_inspection': 'detailed_inspection',  // 详细检查情况
-          'basic_situation': 'basic_situation',  // 基本情况
-          'house_overview': 'house_overview',  // 房屋概况
-          'load_calc_params': 'load_calc_params',  // 荷载及计算参数取值
-          'bearing_capacity_review': 'bearing_capacity_review',  // 承载能力复核验算
-          'analysis_explanation': 'analysis_explanation',  // 分析说明
-          'opinion_and_suggestions': 'opinion_and_suggestions',  // 鉴定意见及处理建议
-        };
-        const datasetKey = node.data?.datasetKey || node.data?.dataset_key || datasetKeyMap[templateStyle] || "concrete_strength";
-
-        const chapterNumber = node.data?.chapterNumber || "";
-        const chapterTitle = node.data?.label || "";
-
-        const payload = {
-          project_id: projectId,
-          chapter_config: {
-            node_id: node.id, // 报告节点ID(用于标识章节)
-            sourceNodeId: sourceNodeId, // 数据源节点ID或检测大类(scope_开头)
-            title: chapterTitle,
-            dataset_key: datasetKey,
-            table_id: node.data?.tableId || node.data?.table_id || "table_7_rebound",
-            template_style: templateStyle,
-            reference_spec_type: referenceSpecType,
-            reference_spec: referenceSpec,
-            rule_id: ruleId,
-            context: {
-              report_type: reportType || "",
-              reference_spec: referenceSpec,
-              chapter_number: chapterNumber,
-            },
-          },
-          project_context: {
-            report_type: reportType || "",
-          },
-        };
-
         const response = await fetch("/api/report/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-          signal,
+          body: JSON.stringify({
+            project_id: projectId,
+            chapter_config: chapterConfig,
+            project_context: {},
+          }),
         });
+
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: response.statusText }));
-          throw new Error(errorData.detail || errorData.message || response.statusText);
+          const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+          throw new Error(errorData.detail || errorData.message || `章节生成失败: ${node.data?.label || node.id}`);
         }
 
         const result = await response.json();
-        if (result?.chapters?.length) {
-          nextChapters.push(...result.chapters);
+        const chapters = Array.isArray(result?.chapters) ? result.chapters : [];
+        if (chapters.length > 0) {
+          successChapters.push(...chapters);
+        } else {
+          throw new Error(`章节无返回内容: ${node.data?.label || node.id}`);
         }
-      } catch {
-        break;
+      } catch (err) {
+        failedTitles.push(String(node.data?.label || node.id));
+        console.error("Generate chapter failed:", err);
       }
-
-      if (signal.aborted) {
-        break;
-      }
-
-      setNodes((nds) => nds.map(n =>
-        n.id === node.id ? { ...n, data: { ...n.data, status: 'completed' } } : n
-      ));
     }
 
-    if (!signal.aborted) {
-      setIsReportGenerating(false);
-      setReportChapters(nextChapters);
-      const snapshot: ReportGenerationSnapshot = {
-        id: `report-snapshot-${Date.now()}`,
+    setGeneratedChapters(successChapters);
+    setIsGeneratingReport(false);
+
+    if (successChapters.length === 0) {
+      alert("报告生成失败：没有成功生成任何章节。请检查每个章节的数据范围配置和采集数据是否已确认。");
+      return;
+    }
+
+    setReportHistory((prev) => [
+      {
+        id: `snapshot-${Date.now()}`,
         createdAt: new Date().toISOString(),
         reportType: reportType || "",
-        chapters: nextChapters,
-        nodeSnapshot: JSON.parse(JSON.stringify(nodes)),
-        chapterCount: nextChapters.length,
-      };
-      setReportHistory((prev) => [snapshot, ...prev].slice(0, 50));
-      setTimeout(() => fitView({ duration: 800, padding: 0.2 }), 500);
-    }
+        chapters: successChapters,
+        chapterCount: successChapters.length,
+      },
+      ...prev,
+    ]);
 
-    abortControllerRef.current = null;
+    if (failedTitles.length > 0) {
+      alert(`部分章节生成失败：${failedTitles.join("、")}。其余章节已生成并可预览。`);
+    }
   };
 
-  // MiniMap 鑺傜偣棰滆壊鍑芥暟
-  const getMiniMapNodeColor = (node: Node) => {
-    if (node.type !== "report") return "#8b5cf6";
-
-    const chapterNumber = node.data?.chapterNumber || "";
-    if (!chapterNumber || chapterNumber.trim() === "")
-      return "#3b82f6";
-
-    // 鎻愬彇绗竴涓暟瀛?
-    const match = chapterNumber.match(/^(\d+)/);
-    if (match) {
-      const topLevel = parseInt(match[1], 10);
-      const colorMap = [
-        "#3b82f6", // blue
-        "#8b5cf6", // purple
-        "#6366f1", // indigo
-        "#7c3aed", // violet
-        "#c026d3", // fuchsia
-        "#ec4899", // pink
-        "#f43f5e", // rose
-        "#06b6d4", // cyan
-        "#14b8a6", // teal
-        "#10b981", // emerald
-      ];
-      return colorMap[(topLevel - 1) % colorMap.length];
-    }
-
-    return "#3b82f6"; // 榛樿钃濊壊
+  const handleLoadHistoryPreview = (snapshot: ReportGenerationSnapshot) => {
+    setGeneratedChapters(snapshot.chapters || []);
+    setShowReportPreview(true);
+    setSelectedNodeId(null);
   };
 
-  // 纾佸惛鍔熻兘 - 鑺傜偣鎷栧姩缁撴潫鏃跺榻?
-  const handleNodeDragStop = useCallback(
-    (_: React.MouseEvent, node: Node) => {
-      const SNAP_DISTANCE = 50; // 鍚搁檮妫€娴嬭窛绂?
-      const SNAP_GAP = 30; // 瀵归綈鍚庝繚鎸佺殑闂磋窛
-      const ALIGNMENT_THRESHOLD = 20; // 瀵归綈闃堝€?
-
-      const nodeWidth = 320; // 鑺傜偣瀹藉害
-      const nodeHeight = 92; // 鑺傜偣楂樺害锛堜及绠楋級
-
-      const draggedNode = node;
-      let snappedX = draggedNode.position.x;
-      let snappedY = draggedNode.position.y;
-
-      // 閬嶅巻鎵€鏈夊叾浠栬妭鐐癸紝瀵绘壘鍚搁檮鐩爣
-      nodes.forEach((otherNode) => {
-        if (otherNode.id === draggedNode.id) return;
-
-        const dx = Math.abs(
-          draggedNode.position.x - otherNode.position.x,
-        );
-        const dy = Math.abs(
-          draggedNode.position.y - otherNode.position.y,
-        );
-
-        // 姘村钩瀵归綈妫€娴嬶紙涓婁笅鎺掑垪锛?
-        if (dx < ALIGNMENT_THRESHOLD) {
-          const bottomOfOther =
-            otherNode.position.y + nodeHeight;
-          const topOfDragged = draggedNode.position.y;
-          const bottomOfDragged =
-            draggedNode.position.y + nodeHeight;
-          const topOfOther = otherNode.position.y;
-
-          if (
-            Math.abs(topOfDragged - bottomOfOther) <
-            SNAP_DISTANCE
-          ) {
-            snappedX = otherNode.position.x;
-            snappedY = bottomOfOther + SNAP_GAP;
-          }
-          else if (
-            Math.abs(bottomOfDragged - topOfOther) <
-            SNAP_DISTANCE
-          ) {
-            snappedX = otherNode.position.x;
-            snappedY = topOfOther - nodeHeight - SNAP_GAP;
-          }
-        }
-
-        // 鍨傜洿瀵归綈妫€娴嬶紙宸﹀彸鎺掑垪锛?
-        if (dy < ALIGNMENT_THRESHOLD) {
-          const rightOfOther = otherNode.position.x + nodeWidth;
-          const leftOfDragged = draggedNode.position.x;
-          const rightOfDragged =
-            draggedNode.position.x + nodeWidth;
-          const leftOfOther = otherNode.position.x;
-
-          if (
-            Math.abs(leftOfDragged - rightOfOther) <
-            SNAP_DISTANCE
-          ) {
-            snappedX = rightOfOther + SNAP_GAP;
-            snappedY = otherNode.position.y;
-          }
-          else if (
-            Math.abs(rightOfDragged - leftOfOther) <
-            SNAP_DISTANCE
-          ) {
-            snappedX = leftOfOther - nodeWidth - SNAP_GAP;
-            snappedY = otherNode.position.y;
-          }
-        }
-
-        // 涓績瀵归綈妫€娴?
-        const centerXDragged =
-          draggedNode.position.x + nodeWidth / 2;
-        const centerYDragged =
-          draggedNode.position.y + nodeHeight / 2;
-        const centerXOther =
-          otherNode.position.x + nodeWidth / 2;
-        const centerYOther =
-          otherNode.position.y + nodeHeight / 2;
-
-        if (
-          Math.abs(centerXDragged - centerXOther) <
-          ALIGNMENT_THRESHOLD &&
-          dy < SNAP_DISTANCE
-        ) {
-          snappedX = otherNode.position.x;
-        }
-
-        if (
-          Math.abs(centerYDragged - centerYOther) <
-          ALIGNMENT_THRESHOLD &&
-          dx < SNAP_DISTANCE
-        ) {
-          snappedY = otherNode.position.y;
-        }
-      });
-
-      if (
-        snappedX !== draggedNode.position.x ||
-        snappedY !== draggedNode.position.y
-      ) {
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.id === draggedNode.id
-              ? { ...n, position: { x: snappedX, y: snappedY } }
-              : n,
-          ),
-        );
-      }
-    },
-    [nodes, setNodes],
-  );
-
-  // Ref for the main content area to calculate precise resize widths
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // 澶勭悊棰勮闈㈡澘楂樺害璋冩暣
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizingPreview || !containerRef.current) return;
-
-      const containerRect = containerRef.current.getBoundingClientRect();
-      // Calculate height from the top of the container
-      const newHeightPixels = e.clientY - containerRect.top;
-      const newHeightPercent = (newHeightPixels / containerRect.height) * 100;
-
-      // 闄愬埗楂樺害鍦?0%鍒?0%涔嬮棿
-      const clampedHeight = Math.max(
-        30,
-        Math.min(80, newHeightPercent),
-      );
-      setPreviewHeight(clampedHeight);
-    };
-
-    const handleMouseUp = () => {
-      setIsResizingPreview(false);
-    };
-
-    if (isResizingPreview) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "row-resize";
-      document.body.style.userSelect = "none";
-    }
-
-    return () => {
-      document.removeEventListener(
-        "mousemove",
-        handleMouseMove,
-      );
-      document.removeEventListener("mouseup", handleMouseUp);
-      document.body.style.cursor = "";
-      document.body.style.userSelect = "";
-    };
-  }, [isResizingPreview]);
-
-  // 褰撻瑙堥潰鏉挎樉绀虹姸鎬佹敼鍙樻椂锛岃嚜鍔ㄨ皟鏁磋鍥句互灞曠ず鎵€鏈夎妭鐐?
-  useEffect(() => {
-    if (showGenerateModal) {
-      // 绋嶅井寤惰繜浠ョ瓑寰呭竷灞€鏇存柊
-      const timer = setTimeout(() => {
-        fitView({ duration: 600, padding: 0.2 });
-      }, 300);
-      return () => clearTimeout(timer);
-    }
-  }, [showGenerateModal, fitView]);
-
-  const handleLoadHistoryPreview = useCallback((snapshot: ReportGenerationSnapshot) => {
-    setReportChapters(snapshot.chapters || []);
-    setIsReportGenerating(false);
-    setShowGenerateModal(true);
-  }, []);
-
-  const handleRestoreNodeConfig = useCallback((snapshot: ReportGenerationSnapshot) => {
-    if (!Array.isArray(snapshot.nodeSnapshot)) return;
-    isInternalUpdateRef.current = true;
-    setNodes(snapshot.nodeSnapshot);
-    setSelectedNode(null);
-    setIsEditorOpen(false);
-  }, [setNodes]);
-
-  const handleClearHistory = useCallback(() => {
-    setReportHistory([]);
-  }, []);
-
-  const handleDeleteHistoryItem = useCallback((itemId: string) => {
+  const handleDeleteHistoryItem = (itemId: string) => {
     setReportHistory((history) => history.filter((item) => item.id !== itemId));
-  }, []);
+  };
 
   const historyCountLabel = reportHistory.length > 99 ? "99+" : String(reportHistory.length);
 
+
+  const selectedNode = nodes.find(n => n.id === selectedNodeId);
+
   return (
-    <div className="flex h-full w-full bg-slate-50 relative">
-      {/* Sidebar */}
-      <NodeSidebar
-        onAddNode={addNode}
-        mode="report"
-        nodes={nodes}
-        onNodeSelect={handleNodeSelect}
-        onGenerateReport={handleGenerateReport}
-        onStopGeneration={handleStopGeneration}
-        isGenerating={isReportGenerating}
-      />
+    <div className="h-full bg-white flex flex-col overflow-hidden relative">
+        <ResizablePanelGroup direction="horizontal" className="flex-1">
+            {/* Left Sidebar: Structure Tree */}
+            <ResizablePanel defaultSize={20} minSize={15} maxSize={30} className="bg-slate-50 border-r border-slate-200 flex flex-col h-full">
+                <div className="p-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
+                    <h2 className="font-semibold text-sm text-slate-800">结构层 - 章节树</h2>
+                    <Button variant="default" size="sm" onClick={handleAddChapter} className="h-8 text-xs bg-slate-900 hover:bg-slate-800 shadow-sm transition-all hover:shadow pl-2 pr-3">
+                        <Plus className="w-3.5 h-3.5 mr-1.5" />
+                        新增章节
+                    </Button>
+                </div>
+                
+                <ScrollArea className="flex-1 p-2">
+                    <ReportChapterTree 
+                        nodes={nodes}
+                        edges={edges}
+                        selectedNodeId={selectedNodeId}
+                        onSelectNode={setSelectedNodeId}
+                        onAddSubChapter={handleAddSubChapter}
+                        onDeleteNode={handleDeleteNode}
+                    />
+                </ScrollArea>
 
-      {/* Main Content Area (Vertical Split Pane) */}
-      <div className="flex-1 flex flex-col relative overflow-hidden" ref={containerRef}>
-        {/* Preview Panel - Top (above canvas) */}
-        {showGenerateModal && (
-          <div
-            className={`relative bg-white border-b border-slate-200 shadow-sm z-10 flex flex-col w-full ${isResizingPreview ? '' : 'transition-all duration-300 ease-in-out'
-              }`}
-            style={{ height: `${previewHeight}%` }}
-          >
-            {/* The Report Preview Component */}
-            <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-              <ReportPreview 
-                isGenerating={isReportGenerating}
-                chapters={reportChapters}
-                onClose={() => setShowGenerateModal(false)}
-              />
-            </div>
+                <div className="p-4 border-t border-slate-200 bg-white space-y-3 shrink-0">
+                    <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100 flex items-start gap-3">
+                        <BookTemplate className="w-4 h-4 text-blue-600 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                             <h4 className="text-xs font-semibold text-blue-900 mb-1">快速模板库</h4>
+                             <p className="text-[10px] text-blue-600/80 leading-relaxed mb-2">浏览 20+ 个预制报告模板，一键导入标准章节结构。</p>
+                             <Button variant="outline" size="sm" className="w-full text-xs h-7 bg-white border-blue-200 hover:bg-blue-50 text-blue-700">浏览模板</Button>
+                        </div>
+                    </div>
+                    
+                    <Button
+                        onClick={handleGenerateFinalReport}
+                        disabled={isGeneratingReport || nodes.length === 0}
+                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white shadow-sm transition-all hover:shadow-md h-10 text-sm font-medium"
+                    >
+                        <Wand2 className="w-4 h-4 mr-2" />
+                        {isGeneratingReport ? "生成中..." : "生成最终报告"}
+                    </Button>
+                </div>
+            </ResizablePanel>
 
-            {/* Resizer Handle - Horizontal */}
-            <div
-              className="absolute left-0 right-0 bottom-0 h-2 cursor-row-resize hover:bg-blue-100 transition-colors z-20 flex items-center justify-center group"
-              onMouseDown={() => setIsResizingPreview(true)}
-            >
-              {/* 涓棿鐨勬嫋鍔ㄦ寚绀哄櫒 - 鎷夊埌搴曟椂娑堝け */}
-              <div 
-                className={`flex flex-col items-center gap-0.5 transition-opacity duration-200 ${previewHeight >= 78 ? 'opacity-0' : 'opacity-100'}`}
-              >
-                <div className="w-8 h-0.5 bg-slate-300 rounded-full group-hover:bg-blue-400 transition-colors" />
-                <svg 
-                  className="w-3 h-3 text-slate-400 group-hover:text-blue-500 transition-colors" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="currentColor" 
-                  strokeWidth="2"
-                >
-                  <path d="M7 10l5 5 5-5" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        )}
+            <ResizableHandle withHandle />
 
-        {/* Flow Editor - takes remaining space */}
-        <div className="flex-1 relative w-full min-h-0">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeClick={onNodeClick}
-            onNodeDoubleClick={onNodeDoubleClick}
-            nodeTypes={nodeTypes}
-            className="bg-slate-50"
-            selectionOnDrag
-            panOnDrag={[1, 2]}
-            selectionMode={SelectionMode.Partial}
-            multiSelectionKeyCode="Shift"
-            nodesConnectable={false}
-            edgesUpdatable={false}
-            edgesFocusable={false}
-            onNodeDragStop={handleNodeDragStop}
-          >
-            <Background color="#e2e8f0" gap={16} />
-            <Controls className="bg-white border border-slate-200 rounded-lg shadow-sm" />
-            <MiniMap
-              className="bg-white border border-slate-200 rounded-lg shadow-sm"
-              nodeColor={getMiniMapNodeColor}
-              maskColor="rgba(241, 245, 249, 0.8)"
-              pannable
-              zoomable
-            />
-            <FitView />
-          </ReactFlow>
+            {/* Right Panel: Content + History */}
+            <ResizablePanel defaultSize={80} className="bg-slate-50 relative flex h-full">
+                <div className="flex-1 h-full">
+                    {showReportPreview ? (
+                        <div className="h-full w-full">
+                            <ReportPreview
+                              isGenerating={isGeneratingReport}
+                              chapters={generatedChapters}
+                              onClose={() => setShowReportPreview(false)}
+                            />
+                        </div>
+                    ) : selectedNode ? (
+                        <div className="flex-1 p-6 overflow-hidden flex flex-col h-full w-full">
+                            <div className="flex items-center gap-2 mb-4 shrink-0">
+                                 <div className="w-1.5 h-6 bg-slate-800 rounded-full" />
+                                 <h2 className="text-lg font-bold text-slate-800 line-clamp-1">{selectedNode.data.label || '未命名章节'}</h2>
+                                 {selectedNode.data.chapterNumber && (
+                                     <span className="px-2 py-0.5 rounded-full bg-slate-200 text-xs font-mono text-slate-600 font-medium ml-2">
+                                         {selectedNode.data.chapterNumber}
+                                     </span>
+                                 )}
+                            </div>
+                            
+                             <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
+                                 <ReportNodeEditor 
+                                    node={selectedNode}
+                                    onClose={() => setSelectedNodeId(null)}
+                                    onUpdate={handleNodeUpdate}
+                                    onHeaderMouseDown={() => {}}
+                                    collectionNodes={collectionNodes}
+                                    reportType={reportType}
+                                 />
+                             </div>
+                        </div>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-400 select-none">
+                            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-slate-100">
+                                 <Settings className="w-10 h-10 text-slate-200" />
+                            </div>
+                            <h3 className="text-base font-semibold text-slate-600 mb-2">未选择章节</h3>
+                            <p className="text-sm text-slate-400 max-w-xs text-center">
+                                请从左侧 <span className="font-medium text-slate-500">结构层</span> 选择一个章节进行编辑，或创建新的章节。
+                            </p>
+                        </div>
+                    )}
+                </div>
 
-          {/* 空白画布提示 */}
-          {nodes.length === 0 && !showGenerateModal && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <FileText className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                <p className="text-slate-400 text-sm">请从左侧选择报告模板或添加章节节点</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Collapsible History Sidebar (inside 报告生成功能) */}
-      <div
-        className={`h-full border-l border-slate-200 bg-white transition-all duration-200 ${
-          isHistorySidebarOpen ? "w-80" : "w-10"
-        }`}
-      >
-        <div className="h-full flex flex-col">
-          <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2">
-            {isHistorySidebarOpen && (
-              <div className="text-sm font-semibold text-slate-700 px-1">报告回溯</div>
-            )}
-            <button
-              className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
-              onClick={() => setIsHistorySidebarOpen((v) => !v)}
-              title={isHistorySidebarOpen ? "收起" : "展开"}
-            >
-              {isHistorySidebarOpen ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-            </button>
-          </div>
-
-          {isHistorySidebarOpen && (
-            <>
-              <div className="px-3 py-2 border-b border-slate-100">
-                <span className="text-xs text-slate-500">共 {reportHistory.length} 份</span>
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                {reportHistory.length === 0 ? (
-                  <div className="text-xs text-slate-400 px-2 py-4">暂无历史报告</div>
-                ) : (
-                  reportHistory.map((item, index) => (
-                    <div key={item.id} className="border border-slate-200 rounded-lg p-2 space-y-2">
-                      <div className="text-xs text-slate-700 font-medium">
-                        第 {reportHistory.length - index} 次生成
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        {new Date(item.createdAt).toLocaleString("zh-CN")}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        章节数：{item.chapterCount} {item.reportType ? `| 类型：${item.reportType}` : ""}
-                      </div>
-                      <div className="flex items-center gap-2">
+                {isHistorySidebarOpen ? (
+                  <div className="h-full w-80 border-l border-slate-200 bg-white transition-all duration-200">
+                    <div className="h-full flex flex-col">
+                      <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2">
+                        <div className="text-sm font-semibold text-slate-700 px-1">报告回溯</div>
                         <button
-                          className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-1"
-                          onClick={() => handleLoadHistoryPreview(item)}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
+                          onClick={() => setIsHistorySidebarOpen(false)}
+                          title="收起"
                         >
-                          <Eye className="w-3 h-3" />
-                          查看
+                          <ChevronRight className="w-4 h-4" />
                         </button>
-                        <button
-                          className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-700 hover:bg-slate-50 inline-flex items-center gap-1"
-                          onClick={() => handleRestoreNodeConfig(item)}
-                        >
-                          <RotateCcw className="w-3 h-3" />
-                          恢复节点
-                        </button>
-                        <button
-                          className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1"
-                          onClick={() => handleDeleteHistoryItem(item.id)}
-                          title="删除此记录"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      </div>
+
+                      <div className="px-3 py-2 border-b border-slate-100">
+                        <span className="text-xs text-slate-500">当前项目共 {reportHistory.length} 份</span>
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                        {reportHistory.length === 0 ? (
+                          <div className="text-xs text-slate-400 px-2 py-4">暂无历史报告</div>
+                        ) : (
+                          reportHistory.map((item, index) => (
+                            <div key={item.id} className="border border-slate-200 rounded-lg p-2 space-y-2">
+                              <div className="text-xs text-slate-700 font-medium">第 {reportHistory.length - index} 次生成</div>
+                              <div className="text-[11px] text-slate-500">{new Date(item.createdAt).toLocaleString("zh-CN")}</div>
+                              <div className="text-[11px] text-slate-500">
+                                章节数：{item.chapterCount} {item.reportType ? `| 类型：${item.reportType}` : ""}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800"
+                                  onClick={() => handleLoadHistoryPreview(item)}
+                                >
+                                  查看
+                                </button>
+                                <button
+                                  className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
+                                  onClick={() => handleDeleteHistoryItem(item.id)}
+                                  title="删除此记录"
+                                >
+                                  删除
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
                       </div>
                     </div>
-                  ))
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setIsHistorySidebarOpen(true)}
+                    className="absolute right-2 top-2 z-20 bg-white border border-slate-200 rounded-lg shadow-sm w-[46px] py-2 hover:bg-slate-50 flex flex-col items-center"
+                    title={`展开当前项目生成历史（${reportHistory.length}）`}
+                  >
+                    <div
+                      className="text-[12px] font-medium text-slate-700 leading-none tracking-[1px]"
+                      style={{ writingMode: "vertical-rl", textOrientation: "upright" }}
+                    >
+                      生成历史
+                    </div>
+                    <div className="mt-2 min-w-[24px] h-[20px] px-1 rounded-full bg-slate-900 text-white text-[11px] leading-[20px] text-center font-semibold">
+                      {historyCountLabel}
+                    </div>
+                  </button>
                 )}
-              </div>
-            </>
-          )}
-
-          {!isHistorySidebarOpen && (
-            <div className="flex-1 flex items-start justify-center pt-3">
-              <div
-                className="min-w-[22px] h-[22px] px-1 rounded-full bg-slate-900 text-white text-[10px] leading-[22px] text-center font-semibold"
-                title={`已生成 ${reportHistory.length} 份报告`}
-              >
-                {historyCountLabel}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Report Node Editor Panel (Floating Draggable) */}
-      {selectedNode && isEditorOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            left: editorPosition.x,
-            top: editorPosition.y,
-            width: editorSize.width,
-            height: editorSize.height,
-            zIndex: 50
-          }}
-          className="shadow-2xl rounded-lg overflow-hidden border border-slate-200 bg-white"
-        >
-          <ReportNodeEditor
-            node={selectedNode}
-            onClose={() => setIsEditorOpen(false)}
-            onUpdate={(updatedNode) => {
-              setNodes((nds) =>
-                nds.map((n) =>
-                  n.id === updatedNode.id ? updatedNode : n,
-                ),
-              );
-            }}
-            onHeaderMouseDown={handleEditorHeaderMouseDown}
-            collectionNodes={collectionNodes}
-            reportType={reportType}
-          />
-          {/* Resize Handle - Bottom Right Corner */}
-          <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 flex items-center justify-center hover:bg-slate-100 rounded-tl transition-colors"
-            onMouseDown={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
-              // 璁板綍鍒濆榧犳爣浣嶇疆鍜岀獥鍙ｅ昂瀵?
-              setResizeStart({
-                mouseX: e.clientX,
-                mouseY: e.clientY,
-                width: editorSize.width,
-                height: editorSize.height
-              });
-              setIsResizingEditor(true);
-            }}
-          >
-            <div className="w-2 h-2 border-r-2 border-b-2 border-slate-400 transform translate-x-[-1px] translate-y-[-1px]"></div>
-          </div>
-        </div>
-      )}
+            </ResizablePanel>
+        </ResizablePanelGroup>
     </div>
-  );
-}
-
-export default function ReportEditor(props: ReportEditorProps) {
-  return (
-    <ReactFlowProvider>
-      <ReportEditorContent {...props} />
-    </ReactFlowProvider>
   );
 }
 

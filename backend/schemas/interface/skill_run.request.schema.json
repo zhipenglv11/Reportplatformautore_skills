@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SkillRunRequestMultipart",
+  "type": "object",
+  "required": [
+    "file"
+  ],
+  "properties": {
+    "file": {
+      "type": "string",
+      "description": "binary file placeholder for multipart/form-data"
+    },
+    "format": {
+      "type": "string",
+      "default": "json"
+    },
+    "output_dir": {
+      "type": "string"
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "node_id": {
+      "type": "string"
+    },
+    "persist_result": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
+

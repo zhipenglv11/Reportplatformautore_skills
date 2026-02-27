@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IngestSkillExecuteOutput",
+  "type": "object",
+  "required": [
+    "project_id",
+    "object_key",
+    "source_hash",
+    "filename"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "object_key": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
+

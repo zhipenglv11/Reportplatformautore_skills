@@ -24,13 +24,11 @@ from api import routes
 from api import collection_routes
 from api import declarative_skill_routes
 from api import skill_orchestrator_routes
-from api import review_routes
 
 app.include_router(routes.router, prefix="/api")
 app.include_router(collection_routes.router, prefix="/api")
 app.include_router(declarative_skill_routes.router, prefix="/api")
 app.include_router(skill_orchestrator_routes.router, prefix="/api")
-app.include_router(review_routes.router, prefix="/api")
 
 @app.get("/")
 async def root():

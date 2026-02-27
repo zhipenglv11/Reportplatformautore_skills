@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "IngestCommitRequest",
+  "type": "object",
+  "required": [
+    "project_id",
+    "node_id",
+    "object_key",
+    "source_hash"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "node_id": {
+      "type": "string"
+    },
+    "object_key": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "template_id": {
+      "type": "string"
+    },
+    "use_llm": {
+      "type": "boolean",
+      "default": true
+    },
+    "persist_result": {
+      "type": "boolean",
+      "default": true
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "selections": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "chunk_id",
+              "template_id"
+            ],
+            "properties": {
+              "chunk_id": {
+                "type": "string"
+              },
+              "template_id": {
+                "type": "string"
+              },
+              "page_range": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "additionalProperties": true
+          }
+        }
+      ]
+    }
+  },
+  "additionalProperties": false
+}
+

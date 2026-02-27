@@ -1,0 +1,153 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NormalizedRecord",
+  "type": "object",
+  "required": [
+    "project_id",
+    "node_id",
+    "test_item",
+    "evidence_refs",
+    "raw_result",
+    "source_prompt_version",
+    "schema_version",
+    "source_hash"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "node_id": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "test_item": {
+      "type": "string"
+    },
+    "test_result": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "test_unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "record_code": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "test_location_text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "design_strength_grade": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "strength_estimated_mpa": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "carbonation_depth_avg_mm": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "test_date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "casting_date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "test_value_json": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "component_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "location": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "../evidence_ref.json"
+      }
+    },
+    "raw_result": {
+      "type": "object"
+    },
+    "confirmed_result": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "result_version": {
+      "type": "integer"
+    },
+    "source_prompt_version": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "string"
+    },
+    "raw_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "input_fingerprint": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    }
+  },
+  "additionalProperties": true
+}
+

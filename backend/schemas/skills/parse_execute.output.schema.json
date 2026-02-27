@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ParseSkillExecuteOutput",
+  "type": "object",
+  "required": [
+    "parse_id",
+    "object_key",
+    "source_hash",
+    "file_type",
+    "page_images",
+    "evidence_refs",
+    "structured_data"
+  ],
+  "properties": {
+    "parse_id": {
+      "type": "string"
+    },
+    "object_key": {
+      "type": "string"
+    },
+    "source_hash": {
+      "type": "string"
+    },
+    "file_type": {
+      "type": "string",
+      "enum": [
+        "pdf",
+        "image"
+      ]
+    },
+    "page_images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "page_paths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "../evidence_ref.json"
+      }
+    },
+    "structured_data": {
+      "type": "object"
+    },
+    "llm_usage": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}
+

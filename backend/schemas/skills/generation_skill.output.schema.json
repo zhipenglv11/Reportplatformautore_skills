@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GenerationSkillOutput",
+  "type": "object",
+  "properties": {
+    "dataset_key": {
+      "type": "string"
+    },
+    "chapter_type": {
+      "type": "string"
+    },
+    "chapter_title": {
+      "type": "string"
+    },
+    "chapter_number": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "table": {
+      "type": "object"
+    },
+    "sections": {
+      "type": "array"
+    },
+    "items": {
+      "type": "array"
+    },
+    "meta": {
+      "type": "object"
+    },
+    "generation_metadata": {
+      "type": "object"
+    },
+    "has_data": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": true
+}
+

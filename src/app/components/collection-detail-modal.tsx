@@ -59,7 +59,7 @@ interface CollectionDetailModalProps {
   ) => Promise<void>;
   onRemoveFile: (fileId: string) => void;
   onUpdateAnalysisResult?: (fileId: string, data: any[]) => void;
-  projectId?: string; // 项目ID（用于编排）
+  projectId?: string; // 项目ID
 }
 
 export default function CollectionDetailModal({
@@ -77,11 +77,9 @@ export default function CollectionDetailModal({
   const [middlePanelOffset, setMiddlePanelOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const [customPrompt, setCustomPrompt] = useState<string>('');
   const [pdfZoom, setPdfZoom] = useState(1); // PDF缩放比例，默认100%
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [isExecutingSkill, setIsExecutingSkill] = useState(false);
-  const [isOrchestrating, setIsOrchestrating] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [editedJsonByFile, setEditedJsonByFile] = useState<Record<string, string>>({});
   const [jsonErrorsByFile, setJsonErrorsByFile] = useState<Record<string, string | null>>({});
@@ -162,7 +160,7 @@ export default function CollectionDetailModal({
   };
 
   const handleUploadClick = () => {
-    onUpload(node.id, node.data.label, customPrompt.trim() || undefined);
+    onUpload(node.id, node.data.label, undefined);
   };
 
 
@@ -179,7 +177,6 @@ export default function CollectionDetailModal({
     setIsExecutingSkill(true);
     try {
       await onAnalyze(node.id, node.data, {
-        prompt: customPrompt.trim() || undefined,
         skillName: selectedSkill,
         targetFileId: selectedFile.id,
       });
@@ -188,57 +185,6 @@ export default function CollectionDetailModal({
     }
   };
 
-  // 智能编排：批量处理所有文件，自动识别类型并路由
-  const handleOrchestrate = async () => {
-    if (uploadedFiles.length === 0) {
-      alert('请先上传文件');
-      return;
-    }
-
-    setIsOrchestrating(true);
-    try {
-      const formData = new FormData();
-      
-      // 添加所有文件
-      uploadedFiles.forEach((fileItem) => {
-        if (fileItem.file) {
-          formData.append('files', fileItem.file);
-        }
-      });
-      
-      formData.append('project_id', projectId || node.id);
-      formData.append('node_id', node.id);
-      formData.append('persist_result', 'true');
-      formData.append('use_llm_classification', 'true');
-
-      const response = await fetch('/api/skill/orchestrate', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || errorData.message || '编排执行失败');
-      }
-
-      const result = await response.json();
-      
-      // 显示结果
-      const successCount = result.successful || 0;
-      const failCount = result.failed || 0;
-      alert(`智能编排完成！\n成功: ${successCount} 个文件\n失败: ${failCount} 个文件`);
-      
-      // 更新文件状态（需要根据实际结果更新）
-      // 这里可以调用 onAnalyze 或直接更新状态
-      console.log('编排结果:', result);
-      
-    } catch (error: any) {
-      console.error('编排执行失败:', error);
-      alert(`执行失败: ${error.message}`);
-    } finally {
-      setIsOrchestrating(false);
-    }
-  };
 
   const handleClose = () => {
     // 检查是否有已解析但未确认的文件
@@ -1043,34 +989,7 @@ export default function CollectionDetailModal({
 
               {/* Analysis Control Section - 移到这里 */}
               
-              {/* Agent Orchestration Section - 智能编排 */}
-              {uploadedFiles.length > 0 && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                    <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
-                    <Sparkles className="w-4 h-4 text-purple-600" />
-                    智能编排 (Agent)
-                  </h4>
-
-                  <div className="border border-purple-200 rounded-lg p-3 bg-gradient-to-br from-purple-50 to-pink-50">
-                    <button
-                      onClick={handleOrchestrate}
-                      disabled={isOrchestrating || uploadedFiles.length === 0}
-                      className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded shadow-sm transition-all text-xs font-medium flex items-center justify-center gap-2"
-                    >
-                      {isOrchestrating ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          处理中...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          智能编排处理 ({uploadedFiles.length})
-                        </>
-                      )}
-                    </button>
-                    <p className="text-[10px] text-purple-600/70 mt-1.5 text-center">
+>
                       自动识别文件类型并路由到对应技能
                     </p>
                   </div>

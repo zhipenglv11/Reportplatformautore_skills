@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReportGenerateRequest",
+  "type": "object",
+  "required": [
+    "project_id",
+    "chapter_config",
+    "project_context"
+  ],
+  "properties": {
+    "project_id": {
+      "type": "string"
+    },
+    "chapter_config": {
+      "type": "object",
+      "required": [
+        "dataset_key"
+      ],
+      "properties": {
+        "node_id": {
+          "type": "string"
+        },
+        "chapter_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "dataset_key": {
+          "type": "string"
+        },
+        "sourceNodeId": {
+          "type": "string"
+        },
+        "source_node_id": {
+          "type": "string"
+        },
+        "use_llm": {
+          "type": "boolean"
+        },
+        "context": {
+          "type": "object"
+        }
+      },
+      "additionalProperties": true
+    },
+    "project_context": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}
+
