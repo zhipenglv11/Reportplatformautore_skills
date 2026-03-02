@@ -1,26 +1,21 @@
-﻿"""
-PDF processing utilities.
+"""
+PDF processing utilities (PyMuPDF, no Poppler).
 Convert PDF pages to images.
 """
 
 import sys
-import io
 import os
 from pathlib import Path
 from typing import List, Optional
 
-from pdf2image import convert_from_path
-from PIL import Image
-
 from scripts.config import TEMP_DIR, SUPPORTED_PDF_FORMATS
 
-# Prefer env POPPLER_PATH, fallback to bundled poppler.
-_LOCAL_POPPLER = Path(__file__).parent.parent / "poppler-24.08.0" / "Library" / "bin"
-_ENV_POPPLER = os.getenv("POPPLER_PATH")
-POPPLER_PATH = Path(_ENV_POPPLER) if _ENV_POPPLER else _LOCAL_POPPLER
+# 确保从 backend 根目录运行时能导入 services
+_backend = Path(__file__).resolve().parents[4]
+if _backend not in sys.path:
+    sys.path.insert(0, str(_backend))
 
-if POPPLER_PATH.exists():
-    os.environ["PATH"] = f"{POPPLER_PATH};{os.environ.get('PATH','')}"
+from services.tools.pdf_to_image import pdf_to_images as pdf_to_pil_images
 
 
 def pdf_to_images(
@@ -28,29 +23,17 @@ def pdf_to_images(
 ) -> List[Path]:
     if output_dir is None:
         output_dir = TEMP_DIR
-
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        if POPPLER_PATH.exists():
-            images = convert_from_path(
-                pdf_path, dpi=dpi, poppler_path=str(POPPLER_PATH)
-            )
-        else:
-            images = convert_from_path(pdf_path, dpi=dpi)
-
-        image_paths = []
-        pdf_name = pdf_path.stem
-
-        for i, image in enumerate(images):
-            image_path = output_dir / f"{pdf_name}_page_{i + 1}.png"
-            image.thumbnail((2000, 2000))
-            image.save(image_path, "PNG", optimize=True, compress_level=9)
-            image_paths.append(image_path)
-
-        return image_paths
-    except Exception as e:
-        raise Exception(f"PDF conversion failed: {str(e)}")
+    images = pdf_to_pil_images(str(pdf_path), dpi=dpi)
+    image_paths = []
+    pdf_name = pdf_path.stem
+    for i, image in enumerate(images):
+        image_path = output_dir / f"{pdf_name}_page_{i + 1}.png"
+        image.thumbnail((2000, 2000))
+        image.save(image_path, "PNG", optimize=True, compress_level=9)
+        image_paths.append(image_path)
+    return image_paths
 
 
 def is_pdf_file(file_path: Path) -> bool:

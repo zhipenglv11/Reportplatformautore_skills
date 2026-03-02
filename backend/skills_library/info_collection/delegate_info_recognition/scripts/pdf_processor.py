@@ -1,63 +1,38 @@
 """
-PDF Processor
+PDF Processor (uses PyMuPDF, no Poppler).
 PDF处理模块
 """
 
 import os
 from pathlib import Path
 from typing import List, Optional
-from pdf2image import convert_from_path
 from PIL import Image
+
+from services.tools.pdf_to_image import pdf_to_images as pdf_to_pil_images
 
 
 class PDFProcessor:
-    """PDF处理器"""
+    """PDF处理器（基于 PyMuPDF，无需系统 Poppler）"""
 
     def __init__(self, poppler_path: Optional[str] = None,
                  temp_dir: Optional[str] = None):
-        """
-        初始化处理器
-        
-        Args:
-            poppler_path: Poppler二进制文件路径
-            temp_dir: 临时文件目录
-        """
-        self.poppler_path = poppler_path
+        """poppler_path 已弃用，保留仅为兼容。"""
         self.temp_dir = Path(temp_dir) if temp_dir else Path('data/temp')
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
     def convert_pdf_to_images(self, pdf_path: str, dpi: int = 200) -> List[str]:
-        """
-        将PDF转换为图片
-        
-        Args:
-            pdf_path: PDF文件路径
-            dpi: 图片分辨率
-            
-        Returns:
-            图片路径列表
-        """
+        """将PDF转换为图片（PyMuPDF）。"""
         pdf_path = Path(pdf_path)
-        
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF文件不存在: {pdf_path}")
 
-        # 转换PDF为图片
-        images = convert_from_path(
-            str(pdf_path),
-            dpi=dpi,
-            poppler_path=self.poppler_path
-        )
-
-        # 保存图片
+        images = pdf_to_pil_images(str(pdf_path), dpi=dpi)
         image_paths = []
         base_name = pdf_path.stem
-
         for i, image in enumerate(images):
             image_path = self.temp_dir / f"{base_name}_page_{i+1}.png"
             image.save(image_path, 'PNG')
             image_paths.append(str(image_path))
-
         return image_paths
 
     def is_pdf(self, file_path: str) -> bool:

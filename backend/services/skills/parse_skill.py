@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from PIL import Image
-from pdf2image import convert_from_path
 
 from config import settings
+from services.tools.pdf_to_image import pdf_to_images as pdf_to_pil_images
 from services.llm_gateway.gateway import LLMGateway
 
 
@@ -40,13 +40,7 @@ class ParseSkill:
         page_paths = []
 
         if suffix == ".pdf":
-            poppler_path = None
-            if settings.poppler_bin_path:
-                poppler_bin = Path(settings.poppler_bin_path)
-                if not poppler_bin.exists():
-                    raise ValueError(f"Poppler bin not found: {poppler_bin}")
-                poppler_path = str(poppler_bin)
-            images = convert_from_path(str(file_path), poppler_path=poppler_path)
+            images = pdf_to_pil_images(str(file_path))
             for idx, img in enumerate(images, start=1):
                 page_path = parsed_dir / f"page-{idx}.png"
                 img.save(page_path, "PNG")

@@ -34,7 +34,7 @@ PyYAML==6.0.1
 
 # PDF解析
 pdfplumber==0.10.3  # 用于PDF基本信息提取（辅助）
-pdf2image==1.16.3  # PDF转图片（Vision-first必需 - 主输入）
+pymupdf==1.24.10   # PDF转图片（纯 Python 依赖，无需 Poppler，适合 Railway/Vercel 部署）
 
 # 图片处理（Vision-first必需 - 支持PDF和图片文件）
 Pillow==10.2.0     # 图片处理库（支持JPG/PNG/BMP/TIFF/WebP等格式）
