@@ -33,8 +33,8 @@ class Settings(BaseSettings):
     supabase_service_role_key: str = "" # Supabase service_role 密钥
     supabase_storage_bucket: str = "uploads"  # Supabase Storage bucket 名称
 
-    # 声明式 Skills 配置
-    declarative_skills_path: str = str(PROJECT_ROOT / "backend" / "skills_library")
+    # 声明式 Skills 配置（相对 config 所在目录，Railway 以 backend 为根时仍能正确找到 skills_library）
+    declarative_skills_path: str = str(Path(__file__).resolve().parent / "skills_library")
     enable_declarative_skills: bool = True
   
     class Config:

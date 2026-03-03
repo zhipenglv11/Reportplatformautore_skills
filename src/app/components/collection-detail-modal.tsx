@@ -1173,7 +1173,7 @@ export default function CollectionDetailModal({
                           }`}
                         >
                           <LayoutList className="w-3.5 h-3.5" />
-                          琛ㄥ崟
+                          表单
                         </button>
                         <button
                           onClick={() => setViewMode('json')}
@@ -1184,7 +1184,7 @@ export default function CollectionDetailModal({
                           }`}
                         >
                           <Code className="w-3.5 h-3.5" />
-                          浠ｇ爜
+                          代码
                         </button>
                     </div>
                   </div>
