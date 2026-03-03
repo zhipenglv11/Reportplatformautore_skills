@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
+import tempfile
 import uuid
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List, Optional
 
+import httpx
 from PIL import Image
 
 from config import settings
@@ -29,31 +31,48 @@ class ParseSkill:
         object_key = ingest_result["object_key"]
         source_hash = ingest_result["source_hash"]
 
-        file_path = Path(object_key)
-        suffix = file_path.suffix.lower()
-
         parse_id = uuid.uuid4().hex
         parsed_dir = Path(settings.parsed_path) / parse_id
         parsed_dir.mkdir(parents=True, exist_ok=True)
 
-        page_images = []
-        page_paths = []
+        # 支持 URL 类型的 object_key（Supabase Storage 等云存储）
+        _tmp_file = None
+        if object_key.startswith("http://") or object_key.startswith("https://"):
+            suffix = Path(object_key.split("?")[0]).suffix.lower()
+            _tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".bin")
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.get(object_key)
+                resp.raise_for_status()
+                _tmp_file.write(resp.content)
+            _tmp_file.flush()
+            _tmp_file.close()
+            file_path = Path(_tmp_file.name)
+        else:
+            file_path = Path(object_key)
+            suffix = file_path.suffix.lower()
 
-        if suffix == ".pdf":
-            images = pdf_to_pil_images(str(file_path))
-            for idx, img in enumerate(images, start=1):
-                page_path = parsed_dir / f"page-{idx}.png"
+        page_images: List = []
+        page_paths: List[str] = []
+
+        try:
+            if suffix == ".pdf":
+                images = pdf_to_pil_images(str(file_path))
+                for idx, img in enumerate(images, start=1):
+                    page_path = parsed_dir / f"page-{idx}.png"
+                    img.save(page_path, "PNG")
+                    page_paths.append(str(page_path))
+                    page_images.append(self._to_base64_data_url(img))
+                file_type = "pdf"
+            else:
+                img = Image.open(file_path)
+                page_path = parsed_dir / "page-1.png"
                 img.save(page_path, "PNG")
                 page_paths.append(str(page_path))
                 page_images.append(self._to_base64_data_url(img))
-            file_type = "pdf"
-        else:
-            img = Image.open(file_path)
-            page_path = parsed_dir / "page-1.png"
-            img.save(page_path, "PNG")
-            page_paths.append(str(page_path))
-            page_images.append(self._to_base64_data_url(img))
-            file_type = "image"
+                file_type = "image"
+        finally:
+            if _tmp_file is not None:
+                Path(_tmp_file.name).unlink(missing_ok=True)
 
         evidence_refs = []
         for page_number in range(1, len(page_paths) + 1):

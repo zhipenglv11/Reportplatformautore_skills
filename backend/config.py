@@ -9,24 +9,33 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 class Settings(BaseSettings):
     db_url: str
-    storage_base_path: str = str(PROJECT_ROOT / "data")  # 本地存储根目录
+    storage_base_path: str = str(PROJECT_ROOT / "data")  # 本地存储根目录（storage_backend=local 时生效）
     llm_provider: str = "qwen"  # openai, siliconflow, qwen, moonshot
-    llm_model: str = "qwen3-omni-flash-2025-12-01"  # qwen3-omni-flash-2025-12-01, qwen3-omni-flash-2025-12-01, qwen3-omni-flash-2025-12-01
+    llm_model: str = "qwen3-omni-flash-2025-12-01"
     siliconflow_base_url: str = "https://api.siliconflow.cn/v1"
     openai_api_key: str = ""
-    siliconflow_api_key: str = ""  # 硅基流动API Key（可选）
-    moonshot_api_key: str = ""  # Moonshot API Key（可选）
+    siliconflow_api_key: str = ""
+    moonshot_api_key: str = ""
     moonshot_base_url: str = "https://api.moonshot.cn/v1"
-    qwen_api_key: str = ""  # DashScope API Key（可选）
+    qwen_api_key: str = ""
     qwen_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     # 已弃用：PDF 转图片已改用 PyMuPDF，无需 Poppler。保留仅为兼容旧环境变量。
     poppler_bin_path: str = ""
     env: str = "development"
     debug: bool = True
-    
+
+    # CORS：逗号分隔的允许源列表，生产环境设为 Vercel 域名
+    allowed_origins: str = "http://localhost:5173,http://localhost:3000"
+
+    # 文件存储后端：local（本地磁盘）或 supabase（Supabase Storage）
+    storage_backend: str = "local"
+    supabase_url: str = ""              # 例如 https://xxxx.supabase.co
+    supabase_service_role_key: str = "" # Supabase service_role 密钥
+    supabase_storage_bucket: str = "uploads"  # Supabase Storage bucket 名称
+
     # 声明式 Skills 配置
-    declarative_skills_path: str = str(PROJECT_ROOT / "backend" / "skills_library")  # 声明式 Skills 基础目录
-    enable_declarative_skills: bool = True  # 是否启用声明式 Skills
+    declarative_skills_path: str = str(PROJECT_ROOT / "backend" / "skills_library")
+    enable_declarative_skills: bool = True
   
     class Config:
         env_file = ".env"

@@ -65,7 +65,7 @@ python-dotenv==1.0.0
 # 数据处理和导出（用于 info_collection skills）
 pandas>=2.0.0      # 数据处理和 CSV/Excel 导出
 openpyxl>=3.1.0    # Excel 文件支持
-opencv-python>=4.8.0  # 图像处理（用于某些 OCR 预处理）
+# opencv-python 已移除：项目中无实际 import cv2 调用，减少构建体积
 
 # 注意：uuid, hashlib, base64, json 都是Python标准库，无需安装
 

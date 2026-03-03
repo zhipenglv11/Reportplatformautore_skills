@@ -9,10 +9,11 @@ app = FastAPI(
     description="Phase 0: 最小可卖Demo"
 )
 
-# CORS配置
+# CORS 配置：从环境变量 ALLOWED_ORIGINS 读取（逗号分隔），默认允许本地开发地址
+_origins = [o.strip() for o in settings.allowed_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=_origins,
     allow_origin_regex=r"^http://(localhost|127\.0\.0\.1):\d+$",
     allow_credentials=True,
     allow_methods=["*"],
