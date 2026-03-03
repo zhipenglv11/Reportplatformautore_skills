@@ -221,7 +221,7 @@ export default function CollectionDetailModal({
 
   const getParseStatus = (status?: string) => {
     if (status === 'uploaded') return { text: '已解析', className: 'bg-emerald-100 text-emerald-700' };
-    if (status === 'failed') return { text: '澶辫触', className: 'bg-rose-100 text-rose-700' };
+    if (status === 'failed') return { text: '失败', className: 'bg-rose-100 text-rose-700' };
     return { text: '未解析', className: 'bg-slate-100 text-slate-600' };
   };
 
@@ -1272,8 +1272,8 @@ export default function CollectionDetailModal({
                     >
                       <CheckCircle className="w-4 h-4" />
                       {isConfirming
-                          ? "淇濆瓨涓?.."
-                          : "纭鏃犺"}
+                          ? "保存中..."
+                          : "确认无误"}
                     </button>
                   </div>
                 </div>
