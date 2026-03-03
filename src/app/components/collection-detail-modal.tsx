@@ -77,7 +77,7 @@ export default function CollectionDetailModal({
   const [middlePanelOffset, setMiddlePanelOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
-  const [pdfZoom, setPdfZoom] = useState(1); // PDF缂╂斁姣斾緥锛岄粯璁?00%
+  const [pdfZoom, setPdfZoom] = useState(1); // PDF 缩放比例，默认 100%
   const [selectedSkill, setSelectedSkill] = useState<string>('');
   const [isExecutingSkill, setIsExecutingSkill] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -99,7 +99,7 @@ export default function CollectionDetailModal({
   const allowedSkillsForNode = skillAllowlistByNodeType[node?.data?.type] || [];
   const preferredSkillForNode = preferredSkillByNodeType[node?.data?.type];
 
-  // 褰撴枃浠跺垪琛ㄥ彉鍖栨椂锛屾洿鏂伴€変腑鏂囦欢
+  // 当文件列表变化时，更新选中文件
   useEffect(() => {
     if (uploadedFiles.length === 0) {
       setSelectedFile(null);
@@ -122,7 +122,7 @@ export default function CollectionDetailModal({
     }
   }, [uploadedFiles, selectedFile?.id]);
 
-  // 褰撳垏鎹㈡枃浠舵椂锛岄噸缃甈DF缂╂斁姣斾緥
+  // 当切换文件时，重置 PDF 缩放比例
   useEffect(() => {
     setPdfZoom(1);
   }, [selectedFile?.id]);
@@ -135,13 +135,13 @@ export default function CollectionDetailModal({
   }, [preferredSkillForNode, selectedSkill, node?.id]);
 
   const MIDDLE_PANEL_WIDTH = 340; // 涓棿鏍忓浐瀹氬搴?
-  const MIN_SIDE_MARGIN = 100; // 宸﹀彸涓や晶鏈€灏忕暀鐧借窛绂?
+  const MIN_SIDE_MARGIN = 100; // 左右两侧最小留白距离
 
-  // 鍒濆鍖栦腑闂存爮浣嶇疆
+  // 初始化中间栏位置
   useEffect(() => {
     if (containerRef.current && middlePanelOffset === 0) {
       const containerWidth = containerRef.current.offsetWidth;
-      // 灞呬腑璁＄畻: (鎬诲搴?- 闈㈡澘瀹藉害) / 2
+      // 居中计算: (总长度 - 面板宽度) / 2
       const initialOffset = Math.floor((containerWidth - MIDDLE_PANEL_WIDTH) / 2);
       setMiddlePanelOffset(initialOffset);
     }
@@ -171,7 +171,7 @@ export default function CollectionDetailModal({
       return;
     }
     if (allowedSkillsForNode.length > 0 && !allowedSkillsForNode.includes(selectedSkill)) {
-      alert(`褰撳墠鑺傜偣浠呮敮鎸侊細${allowedSkillsForNode.join(' / ')}`);
+      alert(`当前节点仅支持：${allowedSkillsForNode.join(' / ')}`);
       return;
     }
 
@@ -214,9 +214,9 @@ export default function CollectionDetailModal({
   };
 
   const handleDeleteFile = (fileId: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // 闃绘瑙﹀彂鏂囦欢閫夋嫨
+    e.stopPropagation(); // 防止触发文件选择
     onRemoveFile(fileId);
-    // selectedFile 浼氶€氳繃 useEffect 鑷姩鏇存柊
+    // selectedFile 会通过 useEffect 自动更新
   };
 
   const getParseStatus = (status?: string) => {
@@ -359,7 +359,7 @@ export default function CollectionDetailModal({
     const items = Array.isArray(data) ? data : (typeof data === 'object' && data !== null ? [data] : []);
 
     if (items.length === 0) {
-         return <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 rounded-lg border border-slate-200 border-dashed">鏆傛棤鏁版嵁缁撴瀯</div>;
+         return <div className="p-8 text-center text-slate-400 text-sm bg-slate-50 rounded-lg border border-slate-200 border-dashed">暂无数据结构</div>;
     }
 
     const handleFieldUpdate = (itemIndex: number, key: string, value: string) => {
@@ -444,7 +444,7 @@ export default function CollectionDetailModal({
             <div className="bg-slate-50/80 px-4 py-2 border-b border-slate-100 flex justify-between items-center backdrop-blur-sm">
                  <span className="text-xs font-bold text-slate-600 flex items-center gap-2">
                     <div className="w-1.5 h-1.5 rounded-full bg-blue-500 ring-2 ring-blue-100"></div>
-                    璁板綍 #{idx + 1}
+                    记录 #{idx + 1}
                  </span>
                  {/* Confidence Badge */}
                  {confidence !== null && (
@@ -459,9 +459,9 @@ export default function CollectionDetailModal({
                {Object.entries(item).map(([key, val]) => {
                    const isSystem = key === 'file' || key === 'table_type' || key === '鍥剧墖搴忓彿' || key === 'box_2d' || key === 'confidence' || key === '__confidence' || key === 'image_index' || key === 'notes' || key === 'source_file' || key === 'parser' || key === 'signoff' || key === 'status';
                    if (isSystem) return null;
-                   if (Array.isArray(val)) return null; // 璺宠繃鏁扮粍锛屽悗闈㈡覆鏌?
+                   if (Array.isArray(val)) return null; // 跳过数组，后面串联
                    
-                   // 鐗规畩澶勭悊 meta 瀵硅薄锛氬睍寮€鍏跺瓙瀛楁锛堥殣钘?source_file / parser锛?
+                   // 特殊处理 meta 对象：展开其子字段（隐藏 source_file / parser）
                    if (key === 'meta' && typeof val === 'object' && val !== null && !Array.isArray(val)) {
                      const hiddenMetaKeys = new Set(['source_file', 'parser']);
                      const metaEntries = Object.entries(val).filter(([subKey]) => !hiddenMetaKeys.has(subKey));
@@ -478,7 +478,7 @@ export default function CollectionDetailModal({
                               </div>
                               <div className="sm:w-[65%] flex items-center relative">
                                  <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                                 {/* 鍒ゆ柇鏄惁涓洪暱鏂囨湰瀛楁 */}
+                                 {/* 判断是否为长文本字段 */}
                                  {subKey === 'house_details' || subKey === 'description' || subKey === 'notes' ? (
                                     <textarea
                                        className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
@@ -531,7 +531,7 @@ export default function CollectionDetailModal({
                       );
                     }
 
-                   // 閫氱敤瀵硅薄瀛楁灞曞紑锛堜緥濡?live_loads / dead_loads / wind_snow_terrain锛?
+                   // 通用对象字段展开 (例如 live_loads / dead_loads)
                    if (typeof val === 'object' && val !== null && !Array.isArray(val)) {
                      const objectEntries = Object.entries(val as Record<string, any>);
                      if (objectEntries.length === 0) return null;
@@ -576,7 +576,7 @@ export default function CollectionDetailModal({
                         </div>
                         <div className="sm:w-[65%] flex items-center relative">
                            <div className="hidden sm:block absolute left-0 top-2 bottom-2 w-px bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                           {/* 鍒ゆ柇鏄惁涓洪暱鏂囨湰瀛楁 */}
+                           {/* 判断是否为长文本字段 */}
                            {key === 'house_details' || key === 'modification_description' || key === 'damage_description' || key === 'description' ? (
                               <textarea
                                  className="w-full px-4 py-2 text-[11px] text-slate-900 bg-transparent border-none focus:ring-0 placeholder:text-slate-300 font-semibold resize-none overflow-hidden leading-relaxed"
@@ -613,14 +613,14 @@ export default function CollectionDetailModal({
                    );
                })}
                
-               {/* 鐒跺悗娓叉煋鏁扮粍瀛楁锛堣〃鏍兼暟鎹級 */}
+               {/* 然后渲染数组字段（表格式数据） */}
                {Object.entries(item).map(([key, val]) => {
                    if (!Array.isArray(val)) return null;
                    if (val.length === 0) return null;
                    
                    // Check if it's an array of objects to render as table
                    if (typeof val[0] === 'object') {
-                      // 杩囨护鎺?seq 鍒?
+                      // 过滤掉 seq 列
                       const subHeaders = Object.keys(val[0]).filter(h => h !== 'seq');
                       return (
                         <div key={key} className="flex flex-col border-t border-slate-100 mt-1">
@@ -759,7 +759,7 @@ export default function CollectionDetailModal({
             <div className="w-1/2">
               <input
                 type="text"
-                placeholder="鍦ㄦ杈撳叆鑺傜偣鎻忚堪淇℃伅..."
+                placeholder="在此输入节点描述信息..."
                 className="w-full bg-white border border-slate-300 hover:border-blue-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg px-4 py-2 text-sm text-slate-700 placeholder:text-slate-400 shadow-sm hover:shadow transition-all outline-none"
               />
             </div>
@@ -784,9 +784,9 @@ export default function CollectionDetailModal({
             <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
               <h3 className="font-medium text-slate-700 flex items-center gap-2">
                 <Database className="w-5 h-5 text-blue-600" />
-                杈撳叆鏁版嵁
+                输入数据
                 <span className="text-xs text-slate-500 ml-auto">
-                  {uploadedFiles.length} 涓枃浠?
+                  {uploadedFiles.length} 个文件
                 </span>
               </h3>
             </div>
@@ -796,9 +796,9 @@ export default function CollectionDetailModal({
                 <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                   <ImageIcon className="w-12 h-12 text-slate-300" />
                 </div>
-                <p className="font-medium mb-1">鏆傛棤杈撳叆鏁版嵁</p>
+                <p className="font-medium mb-1">暂无输入数据</p>
                 <p className="text-xs text-center">
-                  鍦ㄤ腑闂撮潰鏉夸笂浼犳枃浠?
+                  在中间面板上传文件
                 </p>
               </div>
             ) : (
@@ -833,7 +833,7 @@ export default function CollectionDetailModal({
                                 </span>
                                 {file.confirmed && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">
-                                    宸茬‘璁?
+                                    已确认
                                   </span>
                                 )}
                                 {file.error && (
@@ -856,7 +856,7 @@ export default function CollectionDetailModal({
                               <button
                                 onClick={(e) => handleDeleteFile(file.id, e)}
                                 className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-100 rounded-md transition-all flex-shrink-0 text-slate-400 hover:text-red-600"
-                                title="鍒犻櫎鏂囦欢"
+                                title="删除文件"
                               >
                                 <Trash2 className="w-4 h-4" />
                               </button>
@@ -870,13 +870,13 @@ export default function CollectionDetailModal({
                 {selectedFile && middlePanelOffset > 250 && (
                   <div className="p-4 border-t border-slate-200 bg-white">
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-sm font-medium text-slate-700">鏂囦欢棰勮</h4>
+                      <h4 className="text-sm font-medium text-slate-700">文件预览</h4>
                       {(selectedFile.type === 'application/pdf' || selectedFile.name?.toLowerCase().endsWith('.pdf')) && (
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => setPdfZoom(Math.max(0.5, pdfZoom - 0.25))}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800"
-                            title="缂╁皬"
+                            title="缩小"
                           >
                             <ZoomOut className="w-4 h-4" />
                           </button>
@@ -886,14 +886,14 @@ export default function CollectionDetailModal({
                           <button
                             onClick={() => setPdfZoom(Math.min(2, pdfZoom + 0.25))}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800"
-                            title="鏀惧ぇ"
+                            title="放大"
                           >
                             <ZoomIn className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setPdfZoom(1)}
                             className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-600 hover:text-slate-800 ml-1"
-                            title="閲嶇疆缂╂斁"
+                            title="重置缩放"
                           >
                             <RotateCcw className="w-4 h-4" />
                           </button>
@@ -955,7 +955,7 @@ export default function CollectionDetailModal({
             >
               <h3 className="text-sm font-medium text-slate-700 flex items-center gap-2">
                 <Settings className="w-4 h-4 text-slate-500" />
-                閰嶇疆涓庢搷浣?
+                配置与操作
               </h3>
               <Move className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
             </div>
@@ -965,26 +965,26 @@ export default function CollectionDetailModal({
               <div className="mb-4">
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-blue-600 rounded-full"></div>
-                  鏂囦欢涓婁紶
+                  文件上传
                 </h4>
                 
                 <div className="border-2 border-dashed border-slate-300 rounded-lg p-3 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer flex flex-col items-center">
                   <div className="flex items-center justify-center gap-3 mb-2">
                      <Upload className="w-5 h-5 text-slate-400" />
-                     <span className="text-xs text-slate-600">鐐瑰嚮涓婁紶鎴栨嫋鎷芥枃浠?(PDF/鍥剧墖)</span>
+                     <span className="text-xs text-slate-600">点击上传或拖拽文件 (PDF/图片)</span>
                   </div>
                   <button
                     onClick={handleUploadClick}
                     className="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors text-xs font-medium inline-flex items-center justify-center gap-2"
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    閫夋嫨鏂囦欢
+                    选择文件
                   </button>
                 </div>
 
                 {uploadedFiles.length > 0 && (
                   <div className="mt-1.5 text-xs text-slate-500 text-center">
-                    宸查€夋嫨 {uploadedFiles.length} 涓枃浠?
+                    已选择 {uploadedFiles.length} 个文件
                   </div>
                 )}
               </div>
@@ -1001,7 +1001,7 @@ export default function CollectionDetailModal({
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-indigo-600 rounded-full"></div>
                   <Sparkles className="w-4 h-4 text-indigo-600" />
-                  鎵嬪姩閫夋嫨鎶€鑳?
+                  手动选择技能
                 </h4>
 
                 <div className="border border-indigo-200 rounded-lg p-3 bg-gradient-to-br from-indigo-50 to-purple-50">
@@ -1023,19 +1023,19 @@ export default function CollectionDetailModal({
                     {isExecutingSkill ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        鎵ц涓?..
+                        执行中...
                       </>
                     ) : (
                       <>
                         <Sparkles className="w-3.5 h-3.5" />
-                        鎵ц鎶€鑳?
+                        执行技能
                       </>
                     )}
                   </button>
 
                   {!selectedSkill && (
                     <p className="text-[10px] text-amber-600 mt-1.5 text-center">
-                      璇烽€夋嫨涓€涓妧鑳戒互缁х画
+                      请选择一个技能以继续
                     </p>
                   )}
                 </div>
@@ -1048,7 +1048,7 @@ export default function CollectionDetailModal({
                   <h4 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
                     <div className="w-1 h-4 bg-purple-600 rounded-full"></div>
                     <MessageSquare className="w-4 h-4 text-purple-600" />
-                    鑷畾涔夋彁绀鸿瘝
+                    自定义提示词
                   </h4>
                   <span className="text-[10px] text-slate-500">
                     {customPrompt.trim() ? (
@@ -1074,18 +1074,18 @@ export default function CollectionDetailModal({
               <div>
                 <h4 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
                   <div className="w-1 h-4 bg-slate-600 rounded-full"></div>
-                  鍏朵粬閫夐」
+                  其他选项
                 </h4>
                 
                 <div className="space-y-1.5">
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                     <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
-                    <span className="text-xs text-slate-700">鑷姩淇濆瓨鍒嗘瀽缁撴灉</span>
+                    <span className="text-xs text-slate-700">自动保存分析结果</span>
                   </label>
                   
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                     <input type="checkbox" className="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-0" />
-                    <span className="text-xs text-slate-700">瀵煎嚭涓篍xcel鏍煎紡</span>
+                    <span className="text-xs text-slate-700">导出为 Excel 格式</span>
                   </label>
 
                   <label className="flex items-center gap-2 px-2 py-2 bg-slate-50 rounded border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
@@ -1107,7 +1107,7 @@ export default function CollectionDetailModal({
             <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
               <h3 className="font-medium text-slate-700 flex items-center gap-2">
                 <BarChart3 className="w-5 h-5 text-emerald-600" />
-                杈撳嚭鏁版嵁
+                输出数据
                 {analysisResult && (
                   <span className="text-xs text-slate-500 ml-auto">
                     {analysisResult.analyzedAt}
@@ -1121,7 +1121,7 @@ export default function CollectionDetailModal({
                 <div className="w-24 h-24 rounded-full bg-slate-100 flex items-center justify-center mb-3">
                   <BarChart3 className="w-12 h-12 text-slate-300" />
                 </div>
-                <p className="font-medium mb-1">鏆傛棤杈撳嚭鏁版嵁</p>
+                <p className="font-medium mb-1">暂无输出数据</p>
                 <p className="text-xs text-center">
                   执行数据分析后
                   <br />
@@ -1133,10 +1133,10 @@ export default function CollectionDetailModal({
 
                 {selectedFile?.validation_result && (
                   <div className="p-4 pb-0">
-                    <h4 className="text-sm font-medium text-slate-700 mb-3">鏍￠獙缁撴灉</h4>
+                    <h4 className="text-sm font-medium text-slate-700 mb-3">校验结果</h4>
                     {selectedFile.validation_result.errors?.length > 0 && (
                       <div className="mb-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                        <div className="text-xs font-medium text-rose-700 mb-2">閿欒</div>
+                        <div className="text-xs font-medium text-rose-700 mb-2">错误</div>
                         <ul className="text-xs text-rose-700 space-y-1">
                           {selectedFile.validation_result.errors.map((err, idx) => (
                             <li key={idx}>- {err}</li>
@@ -1146,7 +1146,7 @@ export default function CollectionDetailModal({
                     )}
                     {selectedFile.validation_result.warnings?.length > 0 && (
                       <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-                        <div className="text-xs font-medium text-amber-700 mb-2">璀﹀憡</div>
+                        <div className="text-xs font-medium text-amber-700 mb-2">警告</div>
                         <ul className="text-xs text-amber-700 space-y-1">
                           {selectedFile.validation_result.warnings.map((warn, idx) => (
                             <li key={idx}>- {warn}</li>
@@ -1160,7 +1160,7 @@ export default function CollectionDetailModal({
                 {/* JSON Data Display */}
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-medium text-slate-700">璇嗗埆缁撴灉</h4>
+                    <h4 className="text-sm font-medium text-slate-700">识别结果</h4>
                     <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200">
                         <button
                           onClick={() => setViewMode('form')}
@@ -1249,11 +1249,11 @@ export default function CollectionDetailModal({
                            <pre className="text-xs text-slate-700 font-mono whitespace-pre-wrap break-words">
                             {analysisResult.jsonData 
                                 ? JSON.stringify(analysisResult.jsonData, null, 2)
-                                : '鏆傛棤鏁版嵁'}
+                                : '暂无数据'}
                             </pre>
                             {selectedFile && (
                                 <div className="text-xs text-amber-500 mt-2">
-                                    璇疯繍琛屽０鏄庡紡鎶€鑳戒互澶勭悊姝ゆ枃浠躲€?
+                                    请运行声明式技能以处理此文件。
                                 </div>
                             )}
                            </>
