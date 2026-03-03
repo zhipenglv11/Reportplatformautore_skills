@@ -271,7 +271,9 @@ export default function DataCollectionEditor({
       formData.append('persist_result', 'false');
 
       try {
-        const response = await fetch(`/api/skill/${encodeURIComponent(skillName)}/run`, {
+        const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
+        const url = `${apiBase.replace(/\/$/, '')}/api/skill/${encodeURIComponent(skillName)}/run`;
+        const response = await fetch(url, {
           method: 'POST',
           body: formData,
         });

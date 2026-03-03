@@ -288,14 +288,16 @@ export default function CollectionDetailModal({
 
     setIsConfirming(true);
     try {
-      const response = await fetch('/api/skill/confirm', {
+      const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '';
+      const url = `${apiBase.replace(/\/$/, '')}/api/skill/confirm`;
+      const response = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        throw new Error(errorData.detail || errorData.message || '纭澶辫触');
+        throw new Error(errorData.detail || errorData.message || '确认失败');
       }
       setSelectedFile({ ...selectedFile, confirmed: true });
     } catch (error: any) {

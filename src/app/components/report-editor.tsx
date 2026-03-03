@@ -1,4 +1,4 @@
-﻿import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useState, useEffect, useRef } from "react";
 import {
   Node,
   Edge,
@@ -329,7 +329,9 @@ export default function ReportEditor({
       };
 
       try {
-        const response = await fetch("/api/report/generate", {
+        const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || "";
+        const url = `${apiBase.replace(/\/$/, "")}/api/report/generate`;
+        const response = await fetch(url, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
