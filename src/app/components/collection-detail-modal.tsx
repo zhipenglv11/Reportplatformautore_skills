@@ -1,4 +1,4 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { X, Upload, Image as ImageIcon, FileText, Download, BarChart3, CheckCircle, AlertCircle, Loader2, Move, Settings, Database, Trash2, MessageSquare, ZoomIn, ZoomOut, RotateCcw, Sparkles, Code, LayoutList } from 'lucide-react';
 import SkillSelector from './skill-selector';
 
@@ -84,6 +84,7 @@ export default function CollectionDetailModal({
   const [editedJsonByFile, setEditedJsonByFile] = useState<Record<string, string>>({});
   const [jsonErrorsByFile, setJsonErrorsByFile] = useState<Record<string, string | null>>({});
   const [viewMode, setViewMode] = useState<'form' | 'json'>('form');
+  const [customPrompt, setCustomPrompt] = useState('');
 
   const skillAllowlistByNodeType: Record<string, string[]> = {
     'mortar-strength': ['mortar_table_recognition'],
