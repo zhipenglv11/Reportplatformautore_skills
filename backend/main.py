@@ -40,22 +40,26 @@ app.add_middleware(
 
 app.add_middleware(UTF8CharsetMiddleware)
 
-# 挂载路由(统一加api前缀)
-from api import routes
-from api import collection_routes
-from api import declarative_skill_routes
-from api import skill_orchestrator_routes
+# ── 数据采集域 ──
+from collection.api import collection_routes
+from collection.api import declarative_skill_routes
+from collection.api import skill_orchestrator_routes
 
-app.include_router(routes.router, prefix="/api")
 app.include_router(collection_routes.router, prefix="/api")
 app.include_router(declarative_skill_routes.router, prefix="/api")
 app.include_router(skill_orchestrator_routes.router, prefix="/api")
+
+# ── 报告生成域 ──
+from report.api import routes as report_routes
+
+app.include_router(report_routes.router, prefix="/api")
+
 
 @app.get("/")
 async def root():
     return {"message": "AutoRe API", "version": "0.1.0"}
 
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
