@@ -14,6 +14,7 @@ from report.services.report_generator import (
     maybe_llm_polish,
     validate_table_blocks,
 )
+from report.services.report_demo import is_report_demo_enabled
 
 router = APIRouter()
 
@@ -22,6 +23,14 @@ class GenerateReportRequest(BaseModel):
     project_id: str
     chapter_config: dict
     project_context: dict
+
+
+def _record_run_log(payload: Dict[str, Any]) -> None:
+    try:
+        insert_run_log(payload)
+    except Exception:
+        if not is_report_demo_enabled():
+            raise
 
 
 @router.post("/report/generate")
@@ -51,6 +60,7 @@ async def generate_report(request: GenerateReportRequest):
             context.setdefault("sourceNodeId", source_node_id)
 
         skill_result = await dispatch_skill(dataset_key, project_id, node_id, context)
+        skill_meta = skill_result.get("meta", {}) if isinstance(skill_result.get("meta"), dict) else {}
 
         blocks = normalize_blocks(dataset_key, skill_result)
 
@@ -62,7 +72,7 @@ async def generate_report(request: GenerateReportRequest):
         validate_table_blocks(blocks)
 
         table_blocks = [b for b in blocks if b.get("type") == "table"]
-        insert_run_log({
+        _record_run_log({
             "run_id": run_id,
             "project_id": request.project_id,
             "node_id": request.chapter_config.get("node_id"),
@@ -73,10 +83,12 @@ async def generate_report(request: GenerateReportRequest):
             "schema_version": "v1",
             "input_file_hashes": {},
             "skill_steps": {
-                "skill_type": "declarative_skill",
+                "skill_type": "report_demo_fixture" if skill_meta.get("demo_mode") else "generation_skill",
                 "dataset_key": dataset_key,
                 "rows": len(table_blocks[0].get("rows", [])) if table_blocks else 0,
                 "block_count": len(blocks),
+                "demo_mode": bool(skill_meta.get("demo_mode")),
+                "demo_profile": skill_meta.get("demo_profile"),
             },
             "llm_usage": {},
             "total_cost": 0,
@@ -96,7 +108,7 @@ async def generate_report(request: GenerateReportRequest):
             ],
         }
     except Exception as exc:
-        insert_run_log({
+        _record_run_log({
             "run_id": run_id,
             "project_id": request.project_id,
             "node_id": request.chapter_config.get("node_id"),

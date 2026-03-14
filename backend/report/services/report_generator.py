@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 
 from config import settings
 from core.llm.gateway import LLMGateway
+from report.services.report_demo import get_report_demo_result, is_report_demo_enabled
 
 from skills_library.generation.inspection.material_strength.subskills.concrete_strength.impl.parse import (
     parse_concrete_strength,
@@ -55,6 +56,10 @@ async def dispatch_skill(
     context: Dict[str, Any],
 ) -> Dict[str, Any]:
     """根据 dataset_key 调度到对应的技能并返回原始 skill_result。"""
+
+    demo_result = get_report_demo_result(dataset_key)
+    if demo_result is not None:
+        return demo_result
 
     if dataset_key in [
         "concrete_strength",
@@ -238,6 +243,9 @@ async def maybe_llm_polish(
     chapter_config: Dict[str, Any],
 ) -> None:
     """可选的 LLM 润色（原地修改 blocks 中的 text block）。"""
+
+    if is_report_demo_enabled():
+        return
 
     use_llm = bool(chapter_config.get("use_llm")) or dataset_key == "house_overview"
     if not use_llm:

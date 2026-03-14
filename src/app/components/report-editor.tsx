@@ -37,6 +37,21 @@ interface ReportEditorProps {
   onEdgesChange: (edges: Edge[]) => void;
 }
 
+interface TemplateChapter {
+  label: string;
+  chapterNumber: string;
+  templateStyle?: string;
+  sourceNodeId?: string;
+}
+
+interface ReportTemplate {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  chapters: TemplateChapter[];
+}
+
 export default function ReportEditor({
   projectId,
   reportType,
@@ -84,19 +99,19 @@ export default function ReportEditor({
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // mock 模板数据
-  const templates = [
+  const templates: ReportTemplate[] = [
     {
       id: "weifang-1",
       category: "危房鉴定模板",
       name: "危房鉴定标准报告",
       description: "依据相关危房鉴定标准，包含现状调查、检测数据、等级评定等核心内容结构。",
       chapters: [
-        { label: "第一章 工程概况", chapterNumber: "1" },
-        { label: "第二章 鉴定目的、范围及内容", chapterNumber: "2" },
-        { label: "第三章 检查与检测结果", chapterNumber: "3" },
-        { label: "第四章 结构分析与验算", chapterNumber: "4" },
-        { label: "第五章 鉴定结论", chapterNumber: "5" },
-        { label: "第六章 处理建议", chapterNumber: "6" }
+        { label: "基本情况", chapterNumber: "1", templateStyle: "basic_situation", sourceNodeId: "scope_basic_situation" },
+        { label: "房屋概况", chapterNumber: "2", templateStyle: "house_overview", sourceNodeId: "scope_house_overview" },
+        { label: "鉴定内容和方法及原始记录一览表", chapterNumber: "3", templateStyle: "inspection_content_and_methods", sourceNodeId: "scope_inspection_content_and_methods" },
+        { label: "检测鉴定依据", chapterNumber: "4", templateStyle: "inspection_basis", sourceNodeId: "scope_inspection_basis" },
+        { label: "详细检查情况", chapterNumber: "5", templateStyle: "detailed_inspection", sourceNodeId: "scope_detailed_inspection" },
+        { label: "鉴定意见及处理建议", chapterNumber: "6", templateStyle: "opinion_and_suggestions", sourceNodeId: "scope_opinion_and_suggestions" }
       ]
     },
     {
@@ -168,7 +183,9 @@ export default function ReportEditor({
       position: { x: 0, y: idx * 100 }, 
       data: { 
         label: ch.label,
-        chapterNumber: ch.chapterNumber 
+        chapterNumber: ch.chapterNumber,
+        templateStyle: ch.templateStyle,
+        sourceNodeId: ch.sourceNodeId ?? null,
       },
       width: 150,
       height: 40,

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     poppler_bin_path: str = ""
     env: str = "development"
     debug: bool = True
+    report_demo_mode: bool = False
+    report_demo_profile: str = "weifang_v1"
 
     # CORS：逗号分隔的允许源列表，生产环境设为 Vercel 域名
     allowed_origins: str = "http://localhost:5173,http://localhost:3000"
