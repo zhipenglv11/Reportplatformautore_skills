@@ -101,12 +101,19 @@ class ScriptRunner:
 
         # 构建环境变量
         script_env = dict(os.environ)
-        
-        # 将技能目录添加到 PYTHONPATH，确保脚本可以导入 scripts 模块
-        pythonpath = str(self.skill_dir)
-        if "PYTHONPATH" in script_env:
-            pythonpath = f"{pythonpath}{os.pathsep}{script_env['PYTHONPATH']}"
-        script_env["PYTHONPATH"] = pythonpath
+
+        # 将技能目录和 backend 根目录添加到 PYTHONPATH
+        # skill_dir 保障 `scripts.*` 导入；backend 保障 `services.*` 等绝对导入。
+        pythonpath_entries = [str(self.skill_dir)]
+        backend_root = self.skill_dir.parent.parent.parent
+        if (backend_root / "services").exists():
+            pythonpath_entries.append(str(backend_root))
+
+        existing_pythonpath = script_env.get("PYTHONPATH")
+        if existing_pythonpath:
+            pythonpath_entries.append(existing_pythonpath)
+
+        script_env["PYTHONPATH"] = os.pathsep.join(pythonpath_entries)
         
         if env:
             script_env.update(env)

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """技能加载器：解析 SKILL.md 和 fields.yaml"""
 
+import json
 import re
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -45,10 +46,28 @@ class SkillLoader:
 
         # 1. 解析 SKILL.md
         skill_md_path = skill_dir / "SKILL.md"
-        if not skill_md_path.exists():
-            raise ValueError(f"SKILL.md not found in {skill_name} (path: {skill_md_path})")
+        if skill_md_path.exists():
+            metadata = self._parse_skill_md(skill_md_path)
+        else:
+            metadata = {
+                "name": skill_name,
+                "display_name": skill_name,
+                "description": "",
+                "version": "1.0.0",
+                "content": "",
+            }
 
-        metadata = self._parse_skill_md(skill_md_path)
+            skill_json_path = skill_dir / "skill.json"
+            if skill_json_path.exists():
+                try:
+                    raw_meta = json.loads(skill_json_path.read_text(encoding="utf-8-sig"))
+                    if isinstance(raw_meta, dict):
+                        metadata["name"] = raw_meta.get("name") or metadata["name"]
+                        metadata["display_name"] = raw_meta.get("display_name") or metadata["display_name"]
+                        metadata["description"] = raw_meta.get("description") or metadata["description"]
+                        metadata["version"] = raw_meta.get("version") or metadata["version"]
+                except Exception:
+                    pass
 
         # 2. 加载 fields.yaml（可选）
         fields = {}
@@ -147,6 +166,17 @@ class SkillLoader:
                     f"Duplicate skill name detected: {skill_name} "
                     f"({self._skill_index[skill_name]} vs {skill_dir})"
                 )
+            self._skill_index[skill_name] = skill_dir
+
+        # Fallback discovery for skills where SKILL.md has been moved to archive folders.
+        for parse_py in self.skills_base_path.rglob("parse.py"):
+            parent = parse_py.parent
+            skill_dir = parent.parent if parent.name == "impl" else parent
+            skill_name = skill_dir.name
+            if skill_name in self._skill_index:
+                continue
+            if not (skill_dir / "fields.yaml").exists() and not (skill_dir / "skill.json").exists():
+                continue
             self._skill_index[skill_name] = skill_dir
 
     def _get_group_for_dir(self, skill_dir: Path) -> Optional[str]:

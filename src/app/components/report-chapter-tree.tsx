@@ -1,5 +1,6 @@
 ﻿import { Node, Edge } from 'reactflow';
-import { FileText, Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react';
+import { useState } from 'react';
 
 interface ReportChapterTreeProps {
   nodes: Node[];
@@ -18,6 +19,7 @@ export function ReportChapterTree({
   onAddSubChapter,
   onDeleteNode,
 }: ReportChapterTreeProps) {
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const parseChapterNumber = (value: string): number[] => {
     if (!value || value.trim() === '') return [Number.MAX_SAFE_INTEGER];
     return value
@@ -62,47 +64,74 @@ export function ReportChapterTree({
   const renderNode = (node: Node, level: number): JSX.Element => {
     const isSelected = node.id === selectedNodeId;
     const children = (childrenMap.get(node.id) || []).sort(compareByChapterNumber);
+    const hasChildren = children.length > 0;
+    const isOpen = !collapsed[node.id];
 
     return (
-      <div key={node.id} className="space-y-1">
+      <div key={node.id} className="space-y-0.5">
         <div
-          className={`group flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
+          data-nodeid={node.id}
+          className={`group grid items-center py-1.5 pr-1 rounded-md cursor-pointer transition-colors ${
             isSelected ? 'bg-slate-200 text-slate-900' : 'hover:bg-slate-100 text-slate-700'
           }`}
-          style={{ paddingLeft: `${8 + level * 16}px` }}
+          style={{
+            paddingLeft: `${12 + level * 24}px`,
+            gridTemplateColumns: '16px 1fr auto',
+          }}
           onClick={() => onSelectNode(node.id)}
         >
-          <FileText className="w-4 h-4 flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-medium truncate">
-              {node.data.chapterNumber && <span className="text-slate-500 mr-1">{node.data.chapterNumber}</span>}
+          {/* 展开/折叠三角 — 列1：固定16px */}
+          {hasChildren ? (
+            <button
+              className="w-4 h-4 flex items-center justify-center rounded hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
+              onClick={e => {
+                e.stopPropagation();
+                setCollapsed(prev => ({ ...prev, [node.id]: !prev[node.id] }));
+              }}
+            >
+              {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            </button>
+          ) : (
+            <span className="w-4 h-4" />
+          )}
+
+          {/* 文字区 — 列2：1fr，超长文字截断省略 */}
+          <div className="overflow-hidden pl-1">
+            <div className="text-xs font-medium truncate text-slate-700 text-left" title={`${node.data.chapterNumber ? node.data.chapterNumber + ' ' : ''}${node.data.label || '未命名章节'}`}>
+              {node.data.chapterNumber && <span className="text-slate-400 mr-1.5 font-mono text-[10px]">{node.data.chapterNumber}</span>}
               {node.data.label || '未命名章节'}
             </div>
           </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+          {/* 操作按钮 — 列3：auto，永远不被压缩，位置固定 */}
+          <div className="flex items-center gap-0.5 ml-1">
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onAddSubChapter(node.id);
               }}
-              className="p-1 hover:bg-slate-200 rounded"
+              className="p-1 rounded text-slate-300 hover:bg-slate-300 hover:text-slate-900 transition-colors"
               title="添加子章节"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onDeleteNode(node.id);
               }}
-              className="p-1 hover:bg-red-100 rounded text-red-600"
+              className="p-1 rounded text-slate-300 hover:bg-red-100 hover:text-red-600 transition-colors"
               title="删除"
             >
-              <Trash2 className="w-3 h-3" />
+              <Trash2 className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
-        {children.map((child) => renderNode(child, level + 1))}
+        {hasChildren && isOpen && (
+          <div className="mt-0.5 space-y-0.5">
+            {children.map((child) => renderNode(child, level + 1))}
+          </div>
+        )}
       </div>
     );
   };

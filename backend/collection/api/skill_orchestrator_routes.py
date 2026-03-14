@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from config import settings
 from collection.services.skill_orchestrator import SkillOrchestrator
-from collection.services.skill_registry.registry import SkillRegistry, SkillType
+from collection.services.skill_registry.registry import SkillType
 from core.models.db import insert_professional_data, insert_run_log
 
 # 导入共享的数据处理函数（需要直接导入，因为它们在模块级别）
@@ -30,7 +30,7 @@ router = APIRouter()
 
 # 全局编排器实例
 skill_orchestrator = SkillOrchestrator()
-skill_registry = SkillRegistry()
+skill_registry = skill_orchestrator.skill_registry
 
 
 class BatchUploadResponse(BaseModel):
@@ -270,33 +270,36 @@ async def orchestrate_files(
                         })
                         all_record_results.extend(record_results)
                     
-                    # 记录执行日志
+                    # 记录执行日志。非持久化模式不应因为 DB 不可用而让整次编排失败。
                     if project_id and node_id:
                         record_ids = [r.get("record_id") for r in record_results if r.get("record_id")]
                         persisted_count = sum(1 for r in record_results if r.get("status") == "success")
                         script_success = skill_result.get("script_result", {}).get("success", False)
-                        status = "SUCCESS" if script_success and persisted_count > 0 else "FAILED"
-                        
-                        insert_run_log({
-                            "run_id": run_id,
-                            "project_id": project_id,
-                            "node_id": node_id,
-                            "record_id": record_ids[0] if record_ids else None,
-                            "status": status,
-                            "stage": "orchestrated_skill",
-                            "prompt_version": "orchestrator-v1",
-                            "schema_version": "orchestrator-v1",
-                            "input_file_hashes": {"source_hash": source_hash},
-                            "skill_steps": {
-                                "skill_name": skill_name,
-                                "file_type": classification.file_type,
-                                "records": len(record_results),
-                                "persisted": persisted_count,
-                            },
-                            "llm_usage": {},
-                            "total_cost": 0,
-                            "error_message": None if status == "SUCCESS" else "partial_failure",
-                        })
+                        status = (
+                            "SUCCESS" if script_success and persisted_count > 0 else "FAILED"
+                        ) if persist_result else ("SUCCESS" if script_success else "FAILED")
+
+                        if persist_result:
+                            insert_run_log({
+                                "run_id": run_id,
+                                "project_id": project_id,
+                                "node_id": node_id,
+                                "record_id": record_ids[0] if record_ids else None,
+                                "status": status,
+                                "stage": "orchestrated_skill",
+                                "prompt_version": "orchestrator-v1",
+                                "schema_version": "orchestrator-v1",
+                                "input_file_hashes": {"source_hash": source_hash},
+                                "skill_steps": {
+                                    "skill_name": skill_name,
+                                    "file_type": classification.file_type,
+                                    "records": len(record_results),
+                                    "persisted": persisted_count,
+                                },
+                                "llm_usage": {},
+                                "total_cost": 0,
+                                "error_message": None if status == "SUCCESS" else "partial_failure",
+                            })
                     
                     all_results.append({
                         "file_name": file_name,

@@ -143,6 +143,122 @@ class CommitRequest(BaseModel):
     run_id: Optional[str] = None
 
 
+DEFAULT_COLLECTION_NODE_TEMPLATES = {
+    "categories": [
+        {
+            "title": "\u667a\u80fd\u91c7\u96c6",
+            "nodes": [
+                {
+                    "type": "multi-doc-upload",
+                    "label": "\u591a\u6587\u6863\u667a\u80fd\u4e0a\u4f20",
+                    "description": "\u6279\u91cf\u4e0a\u4f20 PDF/\u56fe\u7247\u5e76\u6267\u884c\u667a\u80fd\u89e3\u6790\u3002",
+                    "fields": [
+                        {"name": "batch_name", "label": "\u6279\u6b21\u540d\u79f0", "type": "text", "required": True},
+                        {"name": "upload_time", "label": "\u4e0a\u4f20\u65f6\u95f4", "type": "date", "required": True},
+                    ],
+                }
+            ],
+        },
+        {
+            "title": "\u68c0\u6d4b\u524d\u4fe1\u606f",
+            "nodes": [
+                {
+                    "type": "delegate-info",
+                    "label": "\u59d4\u6258\u65b9\u8d44\u6599",
+                    "description": "\u8bb0\u5f55\u59d4\u6258\u5355\u4f4d\u4e0e\u9879\u76ee\u57fa\u7840\u4fe1\u606f\u3002",
+                    "fields": [
+                        {"name": "project_name", "label": "\u9879\u76ee\u540d\u79f0", "type": "text", "required": True},
+                        {"name": "delegate_unit", "label": "\u59d4\u6258\u5355\u4f4d", "type": "text", "required": True},
+                        {"name": "contact_person", "label": "\u8054\u7cfb\u4eba", "type": "text", "required": True},
+                    ],
+                }
+            ],
+        },
+        {
+            "title": "\u68c0\u6d4b\u4e2d\u6570\u636e",
+            "nodes": [
+                {
+                    "type": "mortar-strength",
+                    "label": "\u7802\u6d46\u5f3a\u5ea6",
+                    "description": "\u7802\u6d46\u5f3a\u5ea6\u68c0\u6d4b\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "test_location", "label": "\u6d4b\u8bd5\u4f4d\u7f6e", "type": "text", "required": True},
+                        {"name": "strength_value", "label": "\u5f3a\u5ea6\u503c(MPa)", "type": "number", "required": True},
+                    ],
+                },
+                {
+                    "type": "concrete-strength",
+                    "label": "\u6df7\u51dd\u571f\u5f3a\u5ea6",
+                    "description": "\u6df7\u51dd\u571f\u6297\u538b\u5f3a\u5ea6\u68c0\u6d4b\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "specimen_number", "label": "\u8bd5\u5757\u7f16\u53f7", "type": "text", "required": True},
+                        {"name": "compressive_strength", "label": "\u6297\u538b\u5f3a\u5ea6(MPa)", "type": "number", "required": True},
+                    ],
+                },
+                {
+                    "type": "brick-strength",
+                    "label": "\u7816\u5f3a\u5ea6",
+                    "description": "\u7816\u5757\u5f3a\u5ea6\u68c0\u6d4b\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "strength_grade", "label": "\u5f3a\u5ea6\u7b49\u7ea7", "type": "text", "required": True},
+                        {"name": "compressive_strength", "label": "\u6297\u538b\u5f3a\u5ea6(MPa)", "type": "number", "required": True},
+                    ],
+                },
+                {
+                    "type": "rebar-diameter",
+                    "label": "\u94a2\u7b4b\u76f4\u5f84",
+                    "description": "\u94a2\u7b4b\u76f4\u5f84\u6d4b\u91cf\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "location", "label": "\u4f4d\u7f6e", "type": "text", "required": True},
+                        {"name": "diameter", "label": "\u76f4\u5f84(mm)", "type": "number", "required": True},
+                    ],
+                },
+                {
+                    "type": "inclination",
+                    "label": "\u503e\u659c\u6d4b\u91cf",
+                    "description": "\u5efa\u7b51\u503e\u659c\u5ea6\u6d4b\u91cf\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "measurement_point", "label": "\u6d4b\u91cf\u70b9", "type": "text", "required": True},
+                        {"name": "inclination_angle", "label": "\u503e\u659c\u89d2\u5ea6", "type": "number", "required": True},
+                    ],
+                },
+                {
+                    "type": "material-test",
+                    "label": "\u6750\u6599\u68c0\u6d4b",
+                    "description": "\u901a\u7528\u6750\u6599\u68c0\u6d4b\u6570\u636e\u3002",
+                    "fields": [
+                        {"name": "material_name", "label": "\u6750\u6599\u540d\u79f0", "type": "text", "required": True},
+                        {"name": "test_result", "label": "\u68c0\u6d4b\u7ed3\u679c", "type": "text", "required": True},
+                    ],
+                },
+                {
+                    "type": "site-inspection",
+                    "label": "\u73b0\u573a\u60c5\u51b5\u68c0\u67e5",
+                    "description": "\u73b0\u573a\u68c0\u67e5\u8bb0\u5f55\u3002",
+                    "fields": [
+                        {"name": "inspection_location", "label": "\u68c0\u67e5\u4f4d\u7f6e", "type": "text", "required": True},
+                        {"name": "site_condition", "label": "\u73b0\u573a\u60c5\u51b5", "type": "text", "required": True},
+                    ],
+                },
+            ],
+        },
+        {
+            "title": "\u68c0\u6d4b\u540e\u6570\u636e",
+            "nodes": [
+                {
+                    "type": "software-calculation",
+                    "label": "\u8f6f\u4ef6\u8ba1\u7b97\u7ed3\u679c",
+                    "description": "\u7ed3\u6784\u8ba1\u7b97\u8f6f\u4ef6\u7ed3\u679c\u3002",
+                    "fields": [
+                        {"name": "mortar_strength_mpa", "label": "\u7802\u6d46\u5f3a\u5ea6\u53d6\u503c", "type": "number", "required": False},
+                        {"name": "brick_strength_grade", "label": "\u7816\u5f3a\u5ea6\u7b49\u7ea7", "type": "text", "required": False},
+                    ],
+                }
+            ],
+        },
+    ]
+}
+
 def _hash_record_instance(source_hash: str, chunk_id: str, template_id: str, schema_version: str) -> str:
     raw = f"{source_hash}:{chunk_id}:{template_id}:{schema_version}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
@@ -177,6 +293,11 @@ def _parse_chunk_pages(chunk_id: str, selection: dict, total_pages: int) -> Opti
             return None
     return None
 
+
+@router.get("/collection/node-templates")
+async def get_collection_node_templates():
+    """Return node templates used by the handoff frontend."""
+    return DEFAULT_COLLECTION_NODE_TEMPLATES
 
 @router.post("/collection/upload")
 async def upload_file(

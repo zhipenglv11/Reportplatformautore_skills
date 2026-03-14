@@ -422,21 +422,21 @@ async def concrete_table_recognition(
             temp_output_dir = output_base
 
         # 2. Execute the declarative skill
-        skill_type, executor = skill_registry.get_skill("concrete-table-recognition")
+        skill_type, executor = skill_registry.get_skill("concrete_table_recognition")
 
         if skill_type != SkillType.DECLARATIVE:
             raise HTTPException(
                 status_code=400,
-                detail="concrete-table-recognition must be a declarative skill",
+                detail="concrete_table_recognition must be a declarative skill",
             )
 
         # Prepare script arguments
-        output_arg = _pick_output_arg(skill_name)
+        output_arg = _pick_output_arg("concrete_table_recognition")
         script_args = [tmp_path, "--format", format, output_arg, str(output_base)]
 
         # Use script execution only; LLM is disabled for deterministic runs
         result = await executor.execute(
-            skill_name="concrete-table-recognition",
+            skill_name="concrete_table_recognition",
             user_input=f"处理文件: {file.filename}",
             use_llm=False,  # 直接执行脚本，不使用LLM
             use_script=True,
@@ -444,7 +444,7 @@ async def concrete_table_recognition(
         )
 
         extracted_records: list[dict[str, Any]] = []
-        report_path = _resolve_report_path("concrete-table-recognition", output_base)
+        report_path = _resolve_report_path("concrete_table_recognition", output_base)
         if report_path:
             report = json.loads(report_path.read_text(encoding="utf-8"))
             for entry in _extract_report_entries(report):
@@ -500,7 +500,7 @@ async def concrete_table_recognition(
                         node_id=node_id,
                         run_id=run_id,
                         source_hash=source_hash,
-                        skill_name="concrete-table-recognition",
+                        skill_name="concrete_table_recognition",
                         record_index=idx,
                         confidence=confidence,
                     )
@@ -541,7 +541,7 @@ async def concrete_table_recognition(
                     "schema_version": "declarative-v1",
                     "input_file_hashes": {"source_hash": source_hash},
                     "skill_steps": {
-                        "skill_name": "concrete-table-recognition",
+                        "skill_name": "concrete_table_recognition",
                         "records": len(record_results),
                         "persisted": persisted_count,
                     },

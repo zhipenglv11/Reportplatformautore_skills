@@ -5,6 +5,8 @@ import { ProjectSidebar, Project } from './components/project-sidebar';
 import { ProjectHeader } from './components/project-header';
 import { ProjectOverviewPage } from './components/project-overview-page';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from './components/ui/tabs';
+import { Button } from './components/ui/button';
+import { History, Clock, FileText, CheckCircle2, XCircle } from 'lucide-react';
 import DataCollectionEditor from './components/data-collection-editor';
 import ReportEditor from './components/report-editor';
 
@@ -46,6 +48,19 @@ export default function App() {
   const [currentProject, setCurrentProject] = useState<Project>(() => loadFromStorage('currentProject', defaultProject));
   const [isAnimating, setIsAnimating] = useState(false);
   const [animatingProjectName, setAnimatingProjectName] = useState('');
+  
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const historyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (historyRef.current && !historyRef.current.contains(event.target as Node)) {
+        setIsHistoryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const isInitialMount = useRef(true);
 
@@ -169,8 +184,8 @@ export default function App() {
 
             <div className="flex-1 overflow-hidden relative flex flex-col">
               <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-                <div className="px-6 border-b border-slate-200 bg-white/50 backdrop-blur-sm shrink-0 flex justify-center">
-                  <TabsList className="flex gap-6 bg-transparent p-0 h-10 w-fit">
+                <div className="px-6 border-b border-slate-200 bg-white/50 backdrop-blur-sm shrink-0 relative flex justify-center items-center h-10">
+                  <TabsList className="flex gap-6 bg-transparent p-0 h-full w-fit">
                     <TabsTrigger
                       value="collection"
                       className="relative h-full px-1 bg-transparent text-slate-500 data-[state=active]:text-slate-900 data-[state=active]:shadow-none font-medium text-sm transition-colors hover:text-slate-700 group"
@@ -187,6 +202,66 @@ export default function App() {
                       <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-slate-900 scale-x-0 group-data-[state=active]:scale-x-100 transition-transform duration-200 ease-out origin-center" />
                     </TabsTrigger>
                   </TabsList>
+                  
+                  {/* 右侧的历史记录按钮与悬浮面板 */}
+                  <div className="absolute right-4 top-0 bottom-0 flex items-center" ref={historyRef}>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+                      className={`h-7 text-slate-500 hover:text-slate-800 hover:bg-slate-200/50 gap-1.5 focus-visible:ring-0 transition-colors ${isHistoryOpen ? 'bg-slate-200/50 text-slate-800' : ''}`}
+                    >
+                      <History className="w-3.5 h-3.5" />
+                      <span className="text-xs">历史记录</span>
+                    </Button>
+
+                    {isHistoryOpen && (
+                      <div className="absolute top-[calc(100%+8px)] right-0 w-[300px] bg-white border border-slate-200 shadow-lg rounded-xl z-50 overflow-hidden animate-in fade-in zoom-in slide-in-from-top-2 duration-200">
+                          <div className="bg-slate-50 border-b border-slate-100 px-4 py-2.5 flex items-center justify-between">
+                            <h4 className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-slate-500" />
+                              最近生成记录
+                            </h4>
+                            <span className="text-[10px] text-slate-400 font-mono">Top 10</span>
+                          </div>
+                          <div className="max-h-[280px] overflow-y-auto w-full flex flex-col p-1.5 gap-0.5 custom-scrollbar">
+                            {/* 示例：成功项目 */}
+                            <button className="flex flex-col text-left p-2.5 rounded-lg hover:bg-slate-50 transition-colors gap-2 group cursor-pointer border border-transparent hover:border-slate-200">
+                              <div className="flex items-center justify-between w-full">
+                                <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900 flex items-center gap-1.5">
+                                  <FileText className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                                  最终鉴定报告_v2
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">10分钟前</span>
+                              </div>
+                              <div className="flex items-center justify-between w-full pl-5">
+                                <span className="text-[10px] text-slate-500">包含 12 个分析章节</span>
+                                <span className="text-[10px] text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-100">
+                                  <CheckCircle2 className="w-3 h-3" /> 生成成功
+                                </span>
+                              </div>
+                            </button>
+                            
+                            {/* 示例：草稿项目 */}
+                            <button className="flex flex-col text-left p-2.5 rounded-lg hover:bg-slate-50 transition-colors gap-2 group cursor-pointer border border-transparent hover:border-slate-200">
+                              <div className="flex items-center justify-between w-full">
+                                <span className="text-xs font-medium text-slate-700 group-hover:text-slate-900 flex items-center gap-1.5">
+                                  <FileText className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
+                                  初评报告_v1
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-mono">2小时前</span>
+                              </div>
+                              <div className="flex items-center justify-between w-full pl-5">
+                                <span className="text-[10px] text-slate-500">包含 8 个分析章节</span>
+                                <span className="text-[10px] text-emerald-600 flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded font-medium border border-emerald-100">
+                                  <CheckCircle2 className="w-3 h-3" /> 生成成功
+                                </span>
+                              </div>
+                            </button>
+                          </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <TabsContent value="collection" className="flex-1 m-0 p-0 min-h-0 overflow-hidden flex flex-col data-[state=inactive]:hidden">

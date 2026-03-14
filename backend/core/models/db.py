@@ -192,12 +192,11 @@ def insert_run_log(payload: Dict[str, Any]) -> Optional[str]:
             :total_cost,
             :error_message
         )
-        returning id
         """
     )
 
     with get_engine().begin() as conn:
-        result = conn.execute(
+        conn.execute(
             query,
             {
                 **payload,
@@ -206,8 +205,8 @@ def insert_run_log(payload: Dict[str, Any]) -> Optional[str]:
                 "llm_usage": json.dumps(payload.get("llm_usage") or {}),
             },
         )
-        row = result.fetchone()
-        return str(row[0]) if row else None
+    run_id = payload.get("run_id")
+    return str(run_id) if run_id is not None else None
 
 
 def fetch_record_id_by_fingerprint(

@@ -1,28 +1,35 @@
-"""技能编排器：智能识别文件类型并路由到对应技能"""
+﻿from __future__ import annotations
 
+import base64
 import json
-from pathlib import Path
-from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
+from io import BytesIO
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
-from core.llm.gateway import LLMGateway
+from PIL import Image
+
 from collection.services.skill_registry.registry import SkillRegistry, SkillType
 from config import settings
+from core.llm.gateway import LLMGateway
+from core.tools.pdf_to_image import pdf_to_images
 
 
 @dataclass
 class FileClassification:
-    """文件分类结果"""
+    """Structured classification result for an uploaded file."""
+
     file_name: str
-    file_type: str  # 文件类型：concrete, mortar, brick, software_result, etc.
-    skill_name: Optional[str]  # 对应的技能名称
-    confidence: float  # 识别置信度
-    reasoning: str  # 识别理由
+    file_type: str
+    skill_name: Optional[str]
+    confidence: float
+    reasoning: str
 
 
 @dataclass
 class OrchestrationResult:
-    """编排执行结果"""
+    """Execution result for a single routed file."""
+
     file_name: str
     classification: FileClassification
     skill_result: Optional[Dict[str, Any]]
@@ -31,118 +38,166 @@ class OrchestrationResult:
 
 
 class SkillOrchestrator:
-    """技能编排器：智能识别文件并路由到对应技能"""
-    
+    """Classify uploaded files and route them to the matching skill."""
+
+    _VISION_SUFFIXES = {".pdf", ".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"}
+    _TEXT_PREVIEW_SUFFIXES = {".txt", ".csv", ".json", ".md"}
+
     def __init__(
         self,
         llm_gateway: Optional[LLMGateway] = None,
         skill_registry: Optional[SkillRegistry] = None,
     ):
-        """
-        初始化技能编排器
-        
-        Args:
-            llm_gateway: LLM Gateway 实例
-            skill_registry: 技能注册表实例
-        """
         self.llm_gateway = llm_gateway or LLMGateway()
         self.skill_registry = skill_registry or SkillRegistry()
-        
-        # 文件类型到技能的映射规则
         self.file_type_to_skill = {
             "concrete": "concrete_table_recognition",
             "mortar": "mortar_table_recognition",
             "brick": "brick_table_recognition",
             "software_result": "software_calculation_recognition",
         }
-        
-        # 技能描述映射（用于 LLM 识别）
         self.skill_descriptions = {
             "concrete_table_recognition": "识别并提取混凝土强度检测表格数据",
             "mortar_table_recognition": "识别并提取砂浆强度检测表格数据",
             "brick_table_recognition": "识别并提取砖强度检测表格数据",
             "software_calculation_recognition": "识别并提取软件计算结果参数",
         }
-    
+        self._initialize_declarative_skills_if_enabled()
+
+    def _initialize_declarative_skills_if_enabled(self) -> None:
+        if not getattr(settings, "enable_declarative_skills", False):
+            return
+
+        try:
+            self.skill_registry.initialize_declarative_skills(Path(settings.declarative_skills_path))
+        except Exception:
+            # Classification can still fall back to rule-based routing.
+            pass
+
+    @staticmethod
+    def _to_base64_data_url(image: Image.Image) -> str:
+        buffer = BytesIO()
+        image.convert("RGB").save(buffer, format="PNG")
+        encoded = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return f"data:image/png;base64,{encoded}"
+
+    def _build_visual_inputs(self, file_path: Path) -> List[str]:
+        suffix = file_path.suffix.lower()
+        if suffix == ".pdf":
+            page_images = pdf_to_images(file_path, dpi=120, first_page=1, last_page=2)
+            return [self._to_base64_data_url(image) for image in page_images[:2]]
+
+        if suffix in self._VISION_SUFFIXES:
+            with Image.open(file_path) as image:
+                return [self._to_base64_data_url(image)]
+
+        return []
+
+    def _build_text_preview(self, file_path: Path, file_content_preview: Optional[str]) -> Optional[str]:
+        if file_content_preview:
+            return file_content_preview[:500]
+
+        if file_path.suffix.lower() not in self._TEXT_PREVIEW_SUFFIXES:
+            return None
+
+        try:
+            return file_path.read_text(encoding="utf-8", errors="ignore")[:500]
+        except Exception:
+            return None
+
+    @staticmethod
+    def _parse_llm_json_response(response: Dict[str, Any]) -> Dict[str, Any]:
+        content = response.get("content")
+        if isinstance(content, dict):
+            return content
+
+        if isinstance(content, str):
+            content = content.strip()
+            if not content:
+                return {}
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                start = content.find("{")
+                end = content.rfind("}")
+                if start != -1 and end != -1 and end > start:
+                    try:
+                        return json.loads(content[start : end + 1])
+                    except json.JSONDecodeError:
+                        return {}
+
+        return {}
+
     async def classify_file(
         self,
         file_path: Path,
         file_name: str,
         file_content_preview: Optional[str] = None,
     ) -> FileClassification:
-        """
-        使用 LLM 识别文件类型
-        
-        Args:
-            file_path: 文件路径
-            file_name: 文件名
-            file_content_preview: 文件内容预览（可选，用于文本文件）
-        
-        Returns:
-            FileClassification: 文件分类结果
-        """
-        # 构建识别 prompt
-        system_prompt = """你是一个专业的文件类型识别助手。你的任务是识别上传的文件类型，并确定应该使用哪个技能来处理它。
+        """Use the configured LLM to classify a file into a supported skill type."""
 
-可用的技能：
-1. concrete_table_recognition: 用于识别和提取混凝土强度检测表格数据
-2. mortar_table_recognition: 用于识别和提取砂浆强度检测表格数据
-3. brick_table_recognition: 用于识别和提取砖强度检测表格数据
-4. software_calculation_recognition: 用于识别和提取软件计算结果参数
+        system_prompt = """你是一个专业的文档类型识别助手。你的任务是识别上传文档属于哪一类检测/计算资料，并选择最合适的 skill。
 
-文件类型包括：
-- concrete: 混凝土强度检测表（如回弹检测记录表、强度结果表等）
-- mortar: 砂浆强度检测表
-- brick: 砖强度检测表
-- software_result: 软件计算结果表
-- other: 其他类型
+可用 skill：
+1. concrete_table_recognition: 混凝土强度检测表
+2. mortar_table_recognition: 砂浆强度检测表
+3. brick_table_recognition: 砖强度检测表
+4. software_calculation_recognition: 软件计算结果
 
-请根据文件名和内容（如果有）识别文件类型，并返回 JSON 格式：
+只允许输出 JSON：
 {
   "file_type": "concrete|mortar|brick|software_result|other",
   "skill_name": "concrete_table_recognition|mortar_table_recognition|brick_table_recognition|software_calculation_recognition|null",
-  "confidence": 0.0-1.0,
-  "reasoning": "识别理由"
-}"""
-
-        user_prompt = f"""请识别以下文件：
-
-文件名: {file_name}
-文件路径: {file_path}
-
+  "confidence": 0.0,
+  "reasoning": "简要理由"
+}
 """
-        
-        if file_content_preview:
-            user_prompt += f"文件内容预览（前500字符）:\n{file_content_preview[:500]}\n"
-        
-        user_prompt += "\n请返回 JSON 格式的识别结果。"
+
+        preview = self._build_text_preview(file_path, file_content_preview)
+        user_prompt = (
+            f"请识别以下文件。\n\n"
+            f"文件名: {file_name}\n"
+            f"文件路径: {file_path}\n"
+            f"文件后缀: {file_path.suffix.lower()}\n"
+        )
+        if preview:
+            user_prompt += f"\n文件内容预览（前500字符）:\n{preview}\n"
+        user_prompt += "\n如果是图片或 PDF，请根据版式、表头、字段名称和检测场景识别类型。只返回 JSON。"
 
         try:
-            # 调用 LLM 进行识别
-            response = await self.llm_gateway.chat_completion(
-                provider=settings.llm_provider,
-                model=settings.llm_model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                temperature=0.3,  # 降低温度以获得更确定的结果
-                response_format={"type": "json_object"},
-            )
-            
-            # 解析响应
-            content = response.get("choices", [{}])[0].get("message", {}).get("content", "{}")
-            result = json.loads(content)
-            
+            visual_inputs = self._build_visual_inputs(file_path)
+            if visual_inputs:
+                response = await self.llm_gateway.vision_completion(
+                    provider=settings.llm_provider,
+                    model=settings.llm_model,
+                    images=visual_inputs,
+                    prompt=f"{system_prompt}\n\n{user_prompt}",
+                    response_format={"type": "json_object"},
+                    temperature=0.3,
+                )
+            else:
+                response = await self.llm_gateway.chat_completion(
+                    provider=settings.llm_provider,
+                    model=settings.llm_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    temperature=0.3,
+                    response_format={"type": "json_object"},
+                )
+
+            result = self._parse_llm_json_response(response)
             file_type = result.get("file_type", "other")
             skill_name = result.get("skill_name")
+            if skill_name in {"", "null", "None"}:
+                skill_name = None
             confidence = float(result.get("confidence", 0.5))
             reasoning = result.get("reasoning", "")
-            
-            # 如果没有指定技能，根据文件类型查找
+
             if not skill_name and file_type in self.file_type_to_skill:
                 skill_name = self.file_type_to_skill[file_type]
-            
+
             return FileClassification(
                 file_name=file_name,
                 file_type=file_type,
@@ -150,29 +205,19 @@ class SkillOrchestrator:
                 confidence=confidence,
                 reasoning=reasoning,
             )
-            
-        except Exception as e:
-            # 如果 LLM 识别失败，使用规则匹配
+        except Exception:
             return self._classify_by_rules(file_name)
-    
+
     def _classify_by_rules(self, file_name: str) -> FileClassification:
-        """
-        使用规则匹配识别文件类型（LLM 失败时的后备方案）
-        
-        Args:
-            file_name: 文件名
-        
-        Returns:
-            FileClassification: 文件分类结果
-        """
+        """Fallback classifier based on filename keywords only."""
+
         file_name_lower = file_name.lower()
-        
-        # 规则匹配
+
         if any(keyword in file_name_lower for keyword in ["混凝土", "concrete", "回弹", "rebound"]):
             file_type = "concrete"
             skill_name = "concrete_table_recognition"
             confidence = 0.8
-            reasoning = "文件名包含混凝土相关关键词"
+            reasoning = "文件名包含混凝土/回弹相关关键词"
         elif any(keyword in file_name_lower for keyword in ["砂浆", "mortar"]):
             file_type = "mortar"
             skill_name = "mortar_table_recognition"
@@ -192,8 +237,8 @@ class SkillOrchestrator:
             file_type = "other"
             skill_name = None
             confidence = 0.3
-            reasoning = "无法识别文件类型，使用默认规则"
-        
+            reasoning = "无法从文件名识别类型，回退为 other"
+
         return FileClassification(
             file_name=file_name,
             file_type=file_type,
@@ -201,88 +246,59 @@ class SkillOrchestrator:
             confidence=confidence,
             reasoning=reasoning,
         )
-    
+
     async def orchestrate_files(
         self,
-        files: List[Tuple[Path, str]],  # [(file_path, file_name), ...]
+        files: List[Tuple[Path, str]],
         project_id: str,
         node_id: str,
         persist_result: bool = True,
     ) -> List[OrchestrationResult]:
-        """
-        编排多个文件：识别类型并执行对应技能
-        
-        Args:
-            files: 文件列表，每个元素是 (file_path, file_name)
-            project_id: 项目ID
-            node_id: 节点ID
-            persist_result: 是否提交到数据库
-        
-        Returns:
-            List[OrchestrationResult]: 执行结果列表
-        """
-        results = []
-        
-        # 步骤1：识别所有文件的类型
-        classifications = []
+        """Legacy service-level orchestration helper."""
+
+        results: List[OrchestrationResult] = []
+        classifications: List[Tuple[Path, str, FileClassification]] = []
+
         for file_path, file_name in files:
             try:
-                # 尝试读取文件预览（如果是文本文件）
-                file_content_preview = None
-                try:
-                    if file_path.suffix.lower() in ['.txt', '.csv']:
-                        content = file_path.read_text(encoding='utf-8', errors='ignore')
-                        file_content_preview = content[:500]
-                except:
-                    pass
-                
-                classification = await self.classify_file(
-                    file_path=file_path,
-                    file_name=file_name,
-                    file_content_preview=file_content_preview,
-                )
+                classification = await self.classify_file(file_path=file_path, file_name=file_name)
                 classifications.append((file_path, file_name, classification))
-            except Exception as e:
-                # 识别失败，使用规则匹配
+            except Exception:
                 classification = self._classify_by_rules(file_name)
                 classifications.append((file_path, file_name, classification))
-        
-        # 步骤2：按技能分组执行
+
         skill_groups: Dict[str, List[Tuple[Path, str, FileClassification]]] = {}
         for file_path, file_name, classification in classifications:
             skill_name = classification.skill_name
             if skill_name:
-                if skill_name not in skill_groups:
-                    skill_groups[skill_name] = []
-                skill_groups[skill_name].append((file_path, file_name, classification))
+                skill_groups.setdefault(skill_name, []).append((file_path, file_name, classification))
             else:
-                # 没有匹配的技能，记录为失败
-                results.append(OrchestrationResult(
-                    file_name=file_name,
-                    classification=classification,
-                    skill_result=None,
-                    success=False,
-                    error=f"未找到匹配的技能，文件类型: {classification.file_type}",
-                ))
-        
-        # 步骤3：执行每个技能组
+                results.append(
+                    OrchestrationResult(
+                        file_name=file_name,
+                        classification=classification,
+                        skill_result=None,
+                        success=False,
+                        error=f"未找到匹配的技能，文件类型: {classification.file_type}",
+                    )
+                )
+
         for skill_name, file_group in skill_groups.items():
             for file_path, file_name, classification in file_group:
                 try:
-                    # 获取技能执行器
                     skill_type, executor = self.skill_registry.get_skill(skill_name)
-                    
                     if skill_type != SkillType.DECLARATIVE:
-                        results.append(OrchestrationResult(
-                            file_name=file_name,
-                            classification=classification,
-                            skill_result=None,
-                            success=False,
-                            error=f"技能 {skill_name} 不是声明式技能",
-                        ))
+                        results.append(
+                            OrchestrationResult(
+                                file_name=file_name,
+                                classification=classification,
+                                skill_result=None,
+                                success=False,
+                                error=f"技能 {skill_name} 不是声明式技能",
+                            )
+                        )
                         continue
-                    
-                    # 执行技能
+
                     script_args = [str(file_path), "--format", "json"]
                     skill_result = await executor.execute(
                         skill_name=skill_name,
@@ -291,21 +307,23 @@ class SkillOrchestrator:
                         use_script=True,
                         script_args=script_args,
                     )
-                    
-                    results.append(OrchestrationResult(
-                        file_name=file_name,
-                        classification=classification,
-                        skill_result=skill_result,
-                        success=True,
-                    ))
-                        
-                except Exception as e:
-                    results.append(OrchestrationResult(
-                        file_name=file_name,
-                        classification=classification,
-                        skill_result=None,
-                        success=False,
-                        error=str(e),
-                    ))
-        
+                    results.append(
+                        OrchestrationResult(
+                            file_name=file_name,
+                            classification=classification,
+                            skill_result=skill_result,
+                            success=True,
+                        )
+                    )
+                except Exception as exc:
+                    results.append(
+                        OrchestrationResult(
+                            file_name=file_name,
+                            classification=classification,
+                            skill_result=None,
+                            success=False,
+                            error=str(exc),
+                        )
+                    )
+
         return results

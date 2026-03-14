@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+﻿import { useCallback, useState, useEffect, useRef } from "react";
 import {
   Node,
   Edge,
@@ -8,22 +8,21 @@ import {
 import { 
   FileText, 
   ChevronLeft, 
-  ChevronRight, 
+  ChevronRight,
+  ChevronDown,
   Plus, 
   Trash2, 
   Settings,
   MoreVertical,
   Wand2,
-  BookTemplate
+  BookTemplate,
+  ListTree,
+  Loader2
 } from "lucide-react";
 import { cn } from "./ui/utils";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "./ui/resizable";
 import { Button } from "./ui/button";
 import { ScrollArea } from "./ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import ReportNodeEditor from "./report-node-editor";
 import { ReportChapterTree } from "./report-chapter-tree";
 import { ReportPreview } from "./report-preview";
@@ -36,14 +35,6 @@ interface ReportEditorProps {
   initialEdges: Edge[];
   onNodesChange: (nodes: Node[]) => void;
   onEdgesChange: (edges: Edge[]) => void;
-}
-
-interface ReportGenerationSnapshot {
-  id: string;
-  createdAt: string;
-  reportType: string;
-  chapters: any[];
-  chapterCount: number;
 }
 
 export default function ReportEditor({
@@ -63,14 +54,139 @@ export default function ReportEditor({
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [generatedChapters, setGeneratedChapters] = useState<any[]>([]);
   const [showReportPreview, setShowReportPreview] = useState(false);
-  const [reportHistory, setReportHistory] = useState<ReportGenerationSnapshot[]>([]);
-  const [isHistorySidebarOpen, setIsHistorySidebarOpen] = useState(true);
+  
+  // 新增：模板弹窗与定制化状态
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isCustomizingStructure, setIsCustomizingStructure] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // 章节配置箭头：追踪选中章节行的垂直中心位置
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedRowY, setSelectedRowY] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!selectedNodeId || !containerRef.current) {
+      setSelectedRowY(null);
+      return;
+    }
+    const measure = () => {
+      const row = containerRef.current?.querySelector(`[data-nodeid="${selectedNodeId}"]`);
+      if (row && containerRef.current) {
+        const rowRect = row.getBoundingClientRect();
+        const containerRect = containerRef.current.getBoundingClientRect();
+        setSelectedRowY(rowRect.top - containerRect.top + rowRect.height / 2);
+      }
+    };
+    // 稍作延迟确保展开/折叠动画后 DOM 稳定
+    const id = requestAnimationFrame(measure);
+    return () => cancelAnimationFrame(id);
+  }, [selectedNodeId, nodes, edges, isSidebarCollapsed]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+
+  // mock 模板数据
+  const templates = [
+    {
+      id: "weifang-1",
+      category: "危房鉴定模板",
+      name: "危房鉴定标准报告",
+      description: "依据相关危房鉴定标准，包含现状调查、检测数据、等级评定等核心内容结构。",
+      chapters: [
+        { label: "第一章 工程概况", chapterNumber: "1" },
+        { label: "第二章 鉴定目的、范围及内容", chapterNumber: "2" },
+        { label: "第三章 检查与检测结果", chapterNumber: "3" },
+        { label: "第四章 结构分析与验算", chapterNumber: "4" },
+        { label: "第五章 鉴定结论", chapterNumber: "5" },
+        { label: "第六章 处理建议", chapterNumber: "6" }
+      ]
+    },
+    {
+      id: "safety-1",
+      category: "安全性鉴定模板",
+      name: "民用建筑安全性鉴定",
+      description: "针对民用建筑结构的安全性评估，包含地基基础与上部结构鉴定。",
+      chapters: [
+        { label: "第1章 概况", chapterNumber: "1" },
+        { label: "第2章 鉴定依据", chapterNumber: "2" },
+        { label: "第3章 结构布置及轴线尺寸复核", chapterNumber: "3" },
+        { label: "第4章 材料强度检测", chapterNumber: "4" },
+        { label: "第5章 结构承载力验算", chapterNumber: "5" },
+        { label: "第6章 安全性评级", chapterNumber: "6" }
+      ]
+    },
+    {
+      id: "quake-1",
+      category: "抗震鉴定模板",
+      name: "现有建筑抗震鉴定",
+      description: "评估现有建筑在规定烈度下的抗震能力，并提供相应的加固建议结构。",
+      chapters: [
+        { label: "1. 概述", chapterNumber: "1" },
+        { label: "2. 抗震设防标准及鉴定要求", chapterNumber: "2" },
+        { label: "3. 建筑场地及地基基础评价", chapterNumber: "3" },
+        { label: "4. 第一级鉴定", chapterNumber: "4" },
+        { label: "5. 第二级鉴定", chapterNumber: "5" },
+        { label: "6. 综合抗震能力评定", chapterNumber: "6" },
+        { label: "7. 抗震加固建议", chapterNumber: "7" }
+      ]
+    },
+    {
+      id: "industry-1",
+      category: "工业建筑可靠性鉴定模板",
+      name: "工业构筑物可靠性鉴定",
+      description: "面向复杂工业厂房体系的完整可靠性鉴定框架，支持复杂结构层级。",
+      chapters: [
+        { label: "一、 建筑物概况", chapterNumber: "1" },
+        { label: "二、 检测鉴定内容及方法", chapterNumber: "2" },
+        { label: "三、 环境条件及使用历史调查", chapterNumber: "3" },
+        { label: "四、 承重结构与构件检测", chapterNumber: "4" },
+        { label: "五、 结构可靠性评级", chapterNumber: "5" },
+        { label: "六、 结论与修缮建议", chapterNumber: "6" }
+      ]
+    }
+  ];
+
+  const categories = Array.from(new Set(templates.map(t => t.category)));
+  const [selectedCategory, setSelectedCategory] = useState<string>(categories[0]);
+
+  // 当弹窗打开时重置状态
+  useEffect(() => {
+     if (isTemplateModalOpen) {
+         setSelectedCategory(categories[0]);
+     }
+  }, [isTemplateModalOpen]);
+
+  const handleApplyTemplate = () => {
+    if (!selectedTemplateId) return;
+    const template = templates.find(t => t.id === selectedTemplateId);
+    if (!template) return;
+
+    isInternalUpdateRef.current = true;
+    
+    // 生成新的节点
+    const newNodes: Node[] = template.chapters.map((ch, idx) => ({
+      id: `chapter-${Date.now()}-${idx}`,
+      type: 'report',
+      position: { x: 0, y: idx * 100 }, 
+      data: { 
+        label: ch.label,
+        chapterNumber: ch.chapterNumber 
+      },
+      width: 150,
+      height: 40,
+    }));
+
+    setNodes(newNodes);
+    setEdges([]); // 清空可能存在的父子连接，采用扁平结构做演示
+    if (newNodes.length > 0) {
+      setSelectedNodeId(newNodes[0].id);
+    }
+    
+    setIsTemplateModalOpen(false);
+  };
 
   // Sync with props
   const isInternalUpdateRef = useRef(false);
   const initialNodesRef = useRef(initialNodes);
   const initialEdgesRef = useRef(initialEdges);
-  const historyStorageKey = `project_${projectId}_report_generation_history`;
 
   // Sync props -> state
   useEffect(() => {
@@ -111,32 +227,6 @@ export default function ReportEditor({
     }, 50);
     return () => clearTimeout(timer);
   }, [edges, onEdgesChangeProp]);
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(historyStorageKey);
-      if (!raw) {
-        setReportHistory([]);
-        return;
-      }
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setReportHistory(parsed);
-      } else {
-        setReportHistory([]);
-      }
-    } catch {
-      setReportHistory([]);
-    }
-  }, [historyStorageKey]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(historyStorageKey, JSON.stringify(reportHistory));
-    } catch {
-      // ignore storage write errors
-    }
-  }, [historyStorageKey, reportHistory]);
 
 
   // Actions
@@ -329,9 +419,7 @@ export default function ReportEditor({
       };
 
       try {
-        const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || "";
-        const url = `${apiBase.replace(/\/$/, "")}/api/report/generate`;
-        const response = await fetch(url, {
+        const response = await fetch("/api/report/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -367,199 +455,383 @@ export default function ReportEditor({
       return;
     }
 
-    setReportHistory((prev) => [
-      {
-        id: `snapshot-${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        reportType: reportType || "",
-        chapters: successChapters,
-        chapterCount: successChapters.length,
-      },
-      ...prev,
-    ]);
-
     if (failedTitles.length > 0) {
       alert(`部分章节生成失败：${failedTitles.join("、")}。其余章节已生成并可预览。`);
     }
   };
 
-  const handleLoadHistoryPreview = (snapshot: ReportGenerationSnapshot) => {
-    setGeneratedChapters(snapshot.chapters || []);
-    setShowReportPreview(true);
-    setSelectedNodeId(null);
-  };
-
-  const handleDeleteHistoryItem = (itemId: string) => {
-    setReportHistory((history) => history.filter((item) => item.id !== itemId));
-  };
-
-  const historyCountLabel = reportHistory.length > 99 ? "99+" : String(reportHistory.length);
-
 
   const selectedNode = nodes.find(n => n.id === selectedNodeId);
 
-  return (
-    <div className="h-full bg-white flex flex-col overflow-hidden relative">
-        <ResizablePanelGroup direction="horizontal" className="flex-1">
-            {/* Left Sidebar: Structure Tree */}
-            <ResizablePanel defaultSize={20} minSize={15} maxSize={30} className="bg-slate-50 border-r border-slate-200 flex flex-col h-full">
-                <div className="p-4 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white shadow-sm z-10">
-                    <h2 className="font-semibold text-sm text-slate-800">结构层 - 章节树</h2>
-                    <Button variant="default" size="sm" onClick={handleAddChapter} className="h-8 text-xs bg-slate-900 hover:bg-slate-800 shadow-sm transition-all hover:shadow pl-2 pr-3">
-                        <Plus className="w-3.5 h-3.5 mr-1.5" />
-                        新增章节
-                    </Button>
-                </div>
-                
-                <ScrollArea className="flex-1 p-2">
-                    <ReportChapterTree 
-                        nodes={nodes}
-                        edges={edges}
-                        selectedNodeId={selectedNodeId}
-                        onSelectNode={setSelectedNodeId}
-                        onAddSubChapter={handleAddSubChapter}
-                        onDeleteNode={handleDeleteNode}
-                    />
-                </ScrollArea>
+  // -----------------------------------------------------------------------
+  // 可折叠目录树（非定制模式下展示）
+  // -----------------------------------------------------------------------
+  function ChapterOutlineTree({
+    nodes,
+    edges,
+    selectedNodeId,
+    onSelectNode,
+    parentId = null,
+    depth = 0,
+  }: {
+    nodes: Node[];
+    edges: Edge[];
+    selectedNodeId: string | null;
+    onSelectNode: (id: string) => void;
+    parentId?: string | null;
+    depth?: number;
+  }) {
+    const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-                <div className="p-4 border-t border-slate-200 bg-white space-y-3 shrink-0">
-                    <div className="bg-blue-50/50 rounded-lg p-3 border border-blue-100 flex items-start gap-3">
-                        <BookTemplate className="w-4 h-4 text-blue-600 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                             <h4 className="text-xs font-semibold text-blue-900 mb-1">快速模板库</h4>
-                             <p className="text-[10px] text-blue-600/80 leading-relaxed mb-2">浏览 20+ 个预制报告模板，一键导入标准章节结构。</p>
-                             <Button variant="outline" size="sm" className="w-full text-xs h-7 bg-white border-blue-200 hover:bg-blue-50 text-blue-700">浏览模板</Button>
-                        </div>
+    const items = parentId === null
+      ? nodes.filter(n => !edges.some(e => e.target === n.id))
+      : edges.filter(e => e.source === parentId).map(e => nodes.find(n => n.id === e.target)).filter(Boolean) as Node[];
+
+    return (
+      <div className={cn("space-y-0.5", depth === 0 ? "p-2" : "mt-0.5")}>
+        {items.map(node => {
+          const hasChildren = edges.some(e => e.source === node.id);
+          const isOpen = !collapsed[node.id];
+          const isSelected = selectedNodeId === node.id;
+
+          return (
+            <div key={node.id}>
+              <div
+                data-nodeid={node.id}
+                className={cn(
+                  "group flex items-center gap-2 p-1.5 pr-1 rounded-md cursor-pointer transition-colors",
+                  isSelected
+                    ? "bg-slate-200 text-slate-900"
+                    : "hover:bg-slate-100 text-slate-700"
+                )}
+                style={{ paddingLeft: `${12 + depth * 24}px` }}
+                onClick={() => onSelectNode(node.id)}
+              >
+                {/* 展开/折叠三角 - 仅在有子章节时显示 */}
+                {hasChildren ? (
+                  <button
+                    className="flex-shrink-0 w-4 h-4 flex items-center justify-center rounded hover:bg-slate-300 text-slate-500 hover:text-slate-700 transition-colors"
+                    onClick={e => {
+                      e.stopPropagation();
+                      setCollapsed(prev => ({ ...prev, [node.id]: !prev[node.id] }));
+                    }}
+                  >
+                    {isOpen
+                      ? <ChevronDown className="w-3.5 h-3.5" />
+                      : <ChevronRight className="w-3.5 h-3.5" />
+                    }
+                  </button>
+                ) : (
+                  <span className="flex-shrink-0 w-4 h-4" />
+                )}
+                <div className="flex-1 min-w-0 pr-1 pl-1">
+                  <div className="text-xs font-medium truncate text-slate-700 text-left">
+                    {node.data?.chapterNumber && <span className="text-slate-400 mr-2 font-mono text-[10px]">{node.data.chapterNumber}</span>}
+                    {node.data?.label || '未命名章节'}
+                  </div>
+                </div>
+              </div>
+
+              {/* 递归渲染子节点 */}
+              {hasChildren && isOpen && (
+                <ChapterOutlineTree
+                  nodes={nodes}
+                  edges={edges}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={onSelectNode}
+                  parentId={node.id}
+                  depth={depth + 1}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+
+    <div ref={containerRef} className="h-full bg-white flex flex-row overflow-hidden relative">
+            {/* Left Sidebar: Structure Tree */}
+            <div className={`shrink-0 bg-slate-50 flex flex-col h-full transition-all duration-200 ${isSidebarCollapsed ? 'w-10 border-r-0' : 'w-[280px] border-r border-slate-200'}`}>
+              {/* 折叠时：显示结构图标 */}
+              {isSidebarCollapsed ? (
+                <div className="flex flex-col items-center py-3 gap-3 flex-1">
+                  <button
+                    onClick={() => setIsSidebarCollapsed(false)}
+                    className="w-7 h-7 flex items-center justify-center rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-200 transition-colors"
+                    title="展开面板"
+                  >
+                    <ListTree className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <>
+                {/* 强化：将模板库提升至顶部作为主要交互入口 */}
+                <div className="p-4 border-b border-slate-200 bg-white shadow-sm z-10 shrink-0 space-y-3">
+                    <div className="flex items-center justify-between mb-1">
+                        <h2 className="font-semibold text-sm text-slate-800">快速模板</h2>
+                        <button
+                          onClick={() => setIsSidebarCollapsed(true)}
+                          className="w-6 h-6 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition-colors"
+                          title="折叠面板"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
                     </div>
+                    
+                    <Button 
+                        variant="default" 
+                        onClick={() => setIsTemplateModalOpen(true)}
+                        className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-sm transition-all h-9 text-sm font-medium flex items-center justify-center gap-2">
+                        <BookTemplate className="w-4 h-4" />
+                        从模板库导入结构
+                    </Button>
+                    <p className="text-[10px] text-slate-500 text-center leading-relaxed">
+                        浏览 20+ 个预制模板，一键导入标准章节
+                    </p>
+                </div>
+
+                {/* 弱化：章节树作为次要的调整区域 */}
+                <div className="flex-1 flex flex-col overflow-hidden bg-slate-50/50">
+                    <div className="px-4 pt-4 pb-2 flex items-center justify-between shrink-0">
+                        <h3 className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                            <ListTree className="w-3.5 h-3.5" />
+                            报告结构
+                        </h3>
+                        {/* 仅在定制模式下显示添加主章节的按钮，设计更简约 */}
+                        {isCustomizingStructure && (
+                            <button
+                                onClick={handleAddChapter}
+                                className="w-5 h-5 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 transition-colors"
+                                title="添加根章节"
+                            >
+                                <Plus className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                    </div>
+                    
+                    <ScrollArea className="flex-1 px-2">
+                        {nodes.length > 0 ? (
+                            isCustomizingStructure ? (
+                                <ReportChapterTree 
+                                    nodes={nodes}
+                                    edges={edges}
+                                    selectedNodeId={selectedNodeId}
+                                    onSelectNode={setSelectedNodeId}
+                                    onAddSubChapter={handleAddSubChapter}
+                                    onDeleteNode={handleDeleteNode}
+                                />
+                            ) : (
+                                <ChapterOutlineTree
+                                    nodes={nodes}
+                                    edges={edges}
+                                    selectedNodeId={selectedNodeId}
+                                    onSelectNode={setSelectedNodeId}
+                                />
+                            )
+                        ) : (
+                            <div className="flex flex-col items-center justify-center h-40 text-center px-4">
+                                <ListTree className="w-8 h-8 text-slate-200 mb-2" />
+                                <p className="text-xs text-slate-400">目前没有报告结构，请从上面的“从模板库导入结构”开始。</p>
+                            </div>
+                        )}
+                    </ScrollArea>
+                </div>
+
+                <div className="p-4 border-t border-slate-200 bg-white shrink-0 shadow-[0_-4px_10px_rgba(0,0,0,0.02)] space-y-3">
+                    <button 
+                        onClick={() => setIsCustomizingStructure(!isCustomizingStructure)} 
+                        className={cn(
+                            "w-full text-[11px] flex items-center justify-center gap-1 transition-colors",
+                            isCustomizingStructure ? "text-slate-800 font-medium" : "text-slate-400 hover:text-slate-600"
+                        )}
+                    >
+                        <Settings className="w-3 h-3" />
+                        {isCustomizingStructure ? "完成定制" : "定制报告章节"}
+                    </button>
                     
                     <Button
                         onClick={handleGenerateFinalReport}
                         disabled={isGeneratingReport || nodes.length === 0}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-white shadow-sm transition-all hover:shadow-md h-10 text-sm font-medium"
+                        className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white shadow-sm transition-all hover:shadow-md h-10 text-sm font-medium flex items-center justify-center"
                     >
-                        <Wand2 className="w-4 h-4 mr-2" />
-                        {isGeneratingReport ? "生成中..." : "生成最终报告"}
+                        {isGeneratingReport ? (
+                            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 生成中...</>
+                        ) : (
+                            <><Wand2 className="w-4 h-4 mr-2" /> 生成最终报告</>
+                        )}
                     </Button>
                 </div>
-            </ResizablePanel>
+                </>
+              )}
+            </div>
 
-            <ResizableHandle withHandle />
+            {/* Right Panel: Content Editor */}
+            <div className="flex-1 bg-slate-50 relative flex flex-col h-full min-w-0">
+                {/* 章节配置指示箭头：动态对齐至左侧选中章节行的垂直位置 */}
+                {selectedNode && selectedRowY !== null && (
+                  <div
+                    className="absolute left-0 z-30 pointer-events-none transition-[top] duration-150"
+                    style={{ top: selectedRowY }}
+                  >
+                    {/* 连接线 */}
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 w-2 h-px bg-slate-400" />
+                    {/* 左指三角形 */}
+                    <div
+                      className="-translate-y-1/2"
+                      style={{
+                        width: 0,
+                        height: 0,
+                        borderTop: '5px solid transparent',
+                        borderBottom: '5px solid transparent',
+                        borderRight: '6px solid #94a3b8',
+                      }}
+                    />
+                  </div>
+                )}
+                {showReportPreview ? (
+                    <div className="h-full w-full">
+                        <ReportPreview
+                          isGenerating={isGeneratingReport}
+                          chapters={generatedChapters}
+                          onClose={() => setShowReportPreview(false)}
+                        />
+                    </div>
+                ) : selectedNode ? (
+                    <div className="flex-1 p-6 overflow-hidden flex flex-col h-full w-full">
+                        <div className="flex items-center gap-2 mb-4 shrink-0">
+                             <div className="w-1.5 h-6 bg-slate-800 rounded-full" />
+                             <h2 className="text-lg font-bold text-slate-800 line-clamp-1">{selectedNode.data.label || '未命名章节'}</h2>
+                             {selectedNode.data.chapterNumber && (
+                                 <span className="px-2 py-0.5 rounded-full bg-slate-200 text-xs font-mono text-slate-600 font-medium ml-2">
+                                     {selectedNode.data.chapterNumber}
+                                 </span>
+                             )}
+                        </div>
+                        
+                         <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
+                             <ReportNodeEditor 
+                                node={selectedNode}
+                                onClose={() => setSelectedNodeId(null)}
+                                onUpdate={handleNodeUpdate}
+                                onHeaderMouseDown={() => {}}
+                                collectionNodes={collectionNodes}
+                                reportType={reportType}
+                             />
+                         </div>
+                    </div>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-slate-400 select-none">
+                        <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-slate-100">
+                             <Settings className="w-10 h-10 text-slate-200" />
+                        </div>
+                        <h3 className="text-base font-semibold text-slate-600 mb-2">未选择章节</h3>
+                        <p className="text-sm text-slate-400 max-w-xs text-center">
+                            请先从左侧导入 <span className="font-medium text-slate-500">报告模板</span>，或点击“定制报告章节”手动创建。
+                        </p>
+                    </div>
+                )}
+            </div>
 
-            {/* Right Panel: Content + History */}
-            <ResizablePanel defaultSize={80} className="bg-slate-50 relative flex h-full">
-                <div className="flex-1 h-full">
-                    {showReportPreview ? (
-                        <div className="h-full w-full">
-                            <ReportPreview
-                              isGenerating={isGeneratingReport}
-                              chapters={generatedChapters}
-                              onClose={() => setShowReportPreview(false)}
-                            />
+        {/* 模板选择弹窗 */}
+        <Dialog open={isTemplateModalOpen} onOpenChange={setIsTemplateModalOpen}>
+            <DialogContent className="sm:max-w-[700px] p-0 overflow-hidden flex flex-col h-[500px]">
+                <div className="px-6 py-4 border-b border-slate-200 shrink-0 bg-white z-10 flex items-start justify-between">
+                    <div>
+                        <DialogTitle className="text-lg">选择报告模板</DialogTitle>
+                        <DialogDescription className="mt-1">
+                            按鉴定类别选择基准模板，快速导入结构。
+                        </DialogDescription>
+                    </div>
+                </div>
+                
+                <div className="flex-1 flex overflow-hidden bg-slate-50/50">
+                    {/* 左侧分类导航 */}
+                    <div className="w-48 border-r border-slate-200 bg-white p-3 overflow-y-auto shrink-0 space-y-1">
+                        {categories.map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setSelectedCategory(cat)}
+                                className={cn(
+                                    "w-full text-left px-3 py-2.5 rounded-md text-sm transition-colors relative",
+                                    selectedCategory === cat 
+                                        ? "bg-slate-100 text-slate-900 font-semibold" 
+                                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                )}
+                            >
+                                {cat}
+                                {selectedCategory === cat && (
+                                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 bg-slate-800 rounded-r-full" />
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* 右侧对应分类模板列表 */}
+                    <div className="flex-1 p-6 overflow-y-auto">
+                        <div className="flex flex-col gap-4">
+                            {templates.filter(t => t.category === selectedCategory).map(template => (
+                                <div 
+                                    key={template.id}
+                                    onClick={() => setSelectedTemplateId(template.id)}
+                                    className={cn(
+                                        "border rounded-xl p-5 cursor-pointer transition-all hover:shadow-md relative bg-white group",
+                                        selectedTemplateId === template.id 
+                                            ? "border-slate-800 ring-1 ring-slate-200 shadow-sm" 
+                                            : "border-slate-200 hover:border-slate-400"
+                                    )}
+                                >
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                            <BookTemplate className={cn(
+                                                "w-5 h-5",
+                                                selectedTemplateId === template.id ? "text-slate-800" : "text-slate-500 group-hover:text-slate-700"
+                                            )} />
+                                            <h4 className="font-semibold text-slate-800 text-base">{template.name}</h4>
+                                        </div>
+                                        <div className={cn(
+                                            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
+                                            selectedTemplateId === template.id ? "border-slate-800 bg-slate-800" : "border-slate-300"
+                                        )}>
+                                            {selectedTemplateId === template.id && <div className="w-2 h-2 bg-white rounded-full flex-shrink-0" />}
+                                        </div>
+                                    </div>
+                                    <p className="text-sm text-slate-500 leading-relaxed mb-4 pl-7">{template.description}</p>
+                                    
+                                    <div className="pl-7">
+                                        <div className="text-[11px] text-slate-600 bg-slate-100 px-2.5 py-1 rounded inline-flex items-center gap-1.5 font-medium">
+                                            <ListTree className="w-3 h-3" />
+                                            包含 {template.chapters.length} 个基准章节
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+
+                            {templates.filter(t => t.category === selectedCategory).length === 0 && (
+                                <div className="text-center py-10 text-slate-400 text-sm">
+                                    该类别下暂无预设模板
+                                </div>
+                            )}
                         </div>
-                    ) : selectedNode ? (
-                        <div className="flex-1 p-6 overflow-hidden flex flex-col h-full w-full">
-                            <div className="flex items-center gap-2 mb-4 shrink-0">
-                                 <div className="w-1.5 h-6 bg-slate-800 rounded-full" />
-                                 <h2 className="text-lg font-bold text-slate-800 line-clamp-1">{selectedNode.data.label || '未命名章节'}</h2>
-                                 {selectedNode.data.chapterNumber && (
-                                     <span className="px-2 py-0.5 rounded-full bg-slate-200 text-xs font-mono text-slate-600 font-medium ml-2">
-                                         {selectedNode.data.chapterNumber}
-                                     </span>
-                                 )}
-                            </div>
-                            
-                             <div className="flex-1 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col relative animate-in fade-in zoom-in-95 duration-200">
-                                 <ReportNodeEditor 
-                                    node={selectedNode}
-                                    onClose={() => setSelectedNodeId(null)}
-                                    onUpdate={handleNodeUpdate}
-                                    onHeaderMouseDown={() => {}}
-                                    collectionNodes={collectionNodes}
-                                    reportType={reportType}
-                                 />
-                             </div>
-                        </div>
-                    ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-400 select-none">
-                            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-sm border border-slate-100">
-                                 <Settings className="w-10 h-10 text-slate-200" />
-                            </div>
-                            <h3 className="text-base font-semibold text-slate-600 mb-2">未选择章节</h3>
-                            <p className="text-sm text-slate-400 max-w-xs text-center">
-                                请从左侧 <span className="font-medium text-slate-500">结构层</span> 选择一个章节进行编辑，或创建新的章节。
-                            </p>
-                        </div>
-                    )}
+                    </div>
                 </div>
 
-                {isHistorySidebarOpen ? (
-                  <div className="h-full w-80 border-l border-slate-200 bg-white transition-all duration-200">
-                    <div className="h-full flex flex-col">
-                      <div className="h-12 border-b border-slate-200 flex items-center justify-between px-2">
-                        <div className="text-sm font-semibold text-slate-700 px-1">报告回溯</div>
-                        <button
-                          className="p-1.5 rounded hover:bg-slate-100 text-slate-500"
-                          onClick={() => setIsHistorySidebarOpen(false)}
-                          title="收起"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      <div className="px-3 py-2 border-b border-slate-100">
-                        <span className="text-xs text-slate-500">当前项目共 {reportHistory.length} 份</span>
-                      </div>
-                      <div className="flex-1 overflow-y-auto p-2 space-y-2">
-                        {reportHistory.length === 0 ? (
-                          <div className="text-xs text-slate-400 px-2 py-4">暂无历史报告</div>
-                        ) : (
-                          reportHistory.map((item, index) => (
-                            <div key={item.id} className="border border-slate-200 rounded-lg p-2 space-y-2">
-                              <div className="text-xs text-slate-700 font-medium">第 {reportHistory.length - index} 次生成</div>
-                              <div className="text-[11px] text-slate-500">{new Date(item.createdAt).toLocaleString("zh-CN")}</div>
-                              <div className="text-[11px] text-slate-500">
-                                章节数：{item.chapterCount} {item.reportType ? `| 类型：${item.reportType}` : ""}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  className="text-xs px-2 py-1 rounded bg-slate-900 text-white hover:bg-slate-800"
-                                  onClick={() => handleLoadHistoryPreview(item)}
-                                >
-                                  查看
-                                </button>
-                                <button
-                                  className="text-xs px-2 py-1 rounded border border-rose-200 text-rose-600 hover:bg-rose-50"
-                                  onClick={() => handleDeleteHistoryItem(item.id)}
-                                  title="删除此记录"
-                                >
-                                  删除
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setIsHistorySidebarOpen(true)}
-                    className="absolute right-2 top-2 z-20 bg-white border border-slate-200 rounded-lg shadow-sm w-[46px] py-2 hover:bg-slate-50 flex flex-col items-center"
-                    title={`展开当前项目生成历史（${reportHistory.length}）`}
-                  >
-                    <div
-                      className="text-[12px] font-medium text-slate-700 leading-none tracking-[1px]"
-                      style={{ writingMode: "vertical-rl", textOrientation: "upright" }}
+                <div className="p-4 border-t border-slate-200 shrink-0 bg-white flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsTemplateModalOpen(false)}>
+                        取消
+                    </Button>
+                    <Button 
+                        onClick={handleApplyTemplate} 
+                        disabled={!selectedTemplateId}
+                        className="bg-slate-900 hover:bg-slate-800 text-white min-w-[100px]"
                     >
-                      生成历史
-                    </div>
-                    <div className="mt-2 min-w-[24px] h-[20px] px-1 rounded-full bg-slate-900 text-white text-[11px] leading-[20px] text-center font-semibold">
-                      {historyCountLabel}
-                    </div>
-                  </button>
-                )}
-            </ResizablePanel>
-        </ResizablePanelGroup>
+                        确认导入
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
     </div>
   );
 }

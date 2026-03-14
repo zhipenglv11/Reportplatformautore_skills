@@ -48,3 +48,7 @@ data/uploads/
 # Archives
 *.zip
 *.tar.gz
+
+# Handoff snapshots
+/frontend-handoff/
+/20260309_frontendonly/
